@@ -479,6 +479,7 @@ client.on("messageCreate", async msg => {
         }
         queue.songs = []
         queue.player.stop()
+        msg.channel.send("⏹️ Berhenti memutar musik/radio")
     }
 
     if (cmd === "radio") {
