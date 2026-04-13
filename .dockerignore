@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+bun.lock
+
+# Config with secrets
+config.json
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Build
+dist/
+build/
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Windows yt-dlp (Docker uses Linux)
+yt-dlp.exe

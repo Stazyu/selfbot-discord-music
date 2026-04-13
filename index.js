@@ -4,7 +4,24 @@ const { spawn } = require("child_process")
 const yts = require("yt-search")
 const ffmpeg = require("ffmpeg-static")
 const https = require("https")
-const config = require("./config.json")
+
+// Read config from environment variables or config.json
+const config = {
+    prefix: process.env.DISCORD_PREFIX || "?",
+    token: process.env.DISCORD_TOKEN
+}
+
+// Fallback to config.json if env vars not set
+if (!config.token) {
+    try {
+        const fileConfig = require("./config.json")
+        config.prefix = fileConfig.prefix || config.prefix
+        config.token = fileConfig.token
+    } catch (err) {
+        console.error("Error: DISCORD_TOKEN environment variable or config.json required")
+        process.exit(1)
+    }
+}
 
 const ytdlpExecutable = process.platform === "win32" ? "./yt-dlp.exe" : "./yt-dlp"
 

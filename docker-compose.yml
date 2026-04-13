@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  discord-music-bot:
+    build: .
+    container_name: discord-music-selfbot
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - DISCORD_PREFIX=${DISCORD_PREFIX:-?}
+    env_file:
+      - .env
