@@ -193,10 +193,23 @@ function spawnRadioFfmpeg(inputUrl) {
         'pipe:1'
     ];
 
-    const ff = spawn(ffmpeg, args, { stdio: ['ignore', 'pipe', 'inherit'] });
+    const ff = spawn(ffmpeg, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+
     ff.on('spawn', () => console.log('[radio] ffmpeg spawned for', inputUrl));
+
+    ff.stderr.on('data', (data) => {
+        console.error('[radio] ffmpeg stderr:', data.toString());
+    });
+
     ff.on('close', (code) => {
         console.log('[radio] ffmpeg closed with code', code);
+        if (code !== 0 && code !== null) {
+            console.error('[radio] ffmpeg exited with error code:', code);
+        }
+    });
+
+    ff.on('error', (err) => {
+        console.error('[radio] ffmpeg process error:', err);
     });
 
     return ff;
