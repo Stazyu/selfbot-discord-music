@@ -16,7 +16,7 @@ RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o 
     && chmod a+rx /usr/local/bin/yt-dlp
 
 # Copy package files
-COPY package.json bun.lock ./
+COPY package.json ./
 
 # Install dependencies
 RUN npm install
