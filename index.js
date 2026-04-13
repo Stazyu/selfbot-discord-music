@@ -285,7 +285,8 @@ async function playRadio(guild, radioUrl, radioName) {
         if (!queue.radioStopped) {
             queue.textChannel.send("❌ Error playing radio, trying to reconnect...")
             setTimeout(() => {
-                if (!queue.radioStopped) {
+                const currentQueue = queues.get(guild.id)
+                if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
                     playRadio(guild, radioUrl, radioName)
                 }
             }, 5000)
@@ -298,15 +299,19 @@ async function playRadio(guild, radioUrl, radioName) {
         if (queue.radioFfmpeg) {
             queue.radioFfmpeg.kill()
         }
+        queue.radioStopped = true
     })
 
     queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
 
     queue.player.once(AudioPlayerStatus.Idle, () => {
         console.log("Radio stream ended, checking if should reconnect...")
-        if (!queue.radioStopped) {
+        const currentQueue = queues.get(guild.id)
+        if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
             console.log("Radio stream ended, reconnecting...")
             playRadio(guild, radioUrl, radioName)
+        } else {
+            console.log("Radio stopped or connection lost, not reconnecting")
         }
     })
 }
