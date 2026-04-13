@@ -21,7 +21,6 @@ async function searchSong(query) {
     const res = await yts(query)
 
     const video = res.videos[0]
-    console.log("Video : ", video)
 
     return {
         title: video.title,
