@@ -6,6 +6,7 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    curl \
     ffmpeg \
     python3 \
     python3-pip \
