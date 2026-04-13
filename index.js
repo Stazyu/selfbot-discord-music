@@ -291,6 +291,12 @@ async function playRadio(guild, radioUrl, radioName) {
     queue.radioUrl = radioUrl
     queue.radioName = radioName
 
+    // Initialize reconnection counter if not exists
+    if (typeof queue.radioReconnectAttempts === 'undefined') {
+        queue.radioReconnectAttempts = 0
+    }
+    const MAX_RECONNECT_ATTEMPTS = 5
+
     const ff = spawnRadioFfmpeg(radioUrl)
     queue.radioFfmpeg = ff
 
@@ -301,13 +307,23 @@ async function playRadio(guild, radioUrl, radioName) {
     queue.player.on("error", (err) => {
         console.error("Radio player error:", err)
         if (!queue.radioStopped) {
-            queue.textChannel.send("❌ Error playing radio, trying to reconnect...")
+            queue.radioReconnectAttempts++
+
+            if (queue.radioReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                queue.textChannel.send(`❌ Gagal reconnect radio setelah ${MAX_RECONNECT_ATTEMPTS} percobaan. Mohon coba lagi nanti.`)
+                queue.radioStopped = true
+                return
+            }
+
+            const delay = Math.min(5000 * Math.pow(2, queue.radioReconnectAttempts - 1), 30000)
+            queue.textChannel.send(`❌ Error playing radio, mencoba reconnect (${queue.radioReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) dalam ${delay / 1000} detik...`)
+
             setTimeout(() => {
                 const currentQueue = queues.get(guild.id)
                 if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
                     playRadio(guild, radioUrl, radioName)
                 }
-            }, 5000)
+            }, delay)
         }
     })
 
@@ -318,6 +334,7 @@ async function playRadio(guild, radioUrl, radioName) {
             queue.radioFfmpeg.kill()
         }
         queue.radioStopped = true
+        queue.radioReconnectAttempts = 0
     })
 
     queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
@@ -326,8 +343,23 @@ async function playRadio(guild, radioUrl, radioName) {
         console.log("Radio stream ended, checking if should reconnect...")
         const currentQueue = queues.get(guild.id)
         if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
-            console.log("Radio stream ended, reconnecting...")
-            playRadio(guild, radioUrl, radioName)
+            queue.radioReconnectAttempts++
+
+            if (queue.radioReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                queue.textChannel.send(`❌ Radio stream terputus setelah ${MAX_RECONNECT_ATTEMPTS} percobaan reconnect. Mohon coba lagi nanti.`)
+                queue.radioStopped = true
+                return
+            }
+
+            const delay = Math.min(5000 * Math.pow(2, queue.radioReconnectAttempts - 1), 30000)
+            console.log(`Radio stream ended, reconnecting in ${delay / 1000}s (attempt ${queue.radioReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`)
+
+            setTimeout(() => {
+                const currentQueue = queues.get(guild.id)
+                if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
+                    playRadio(guild, radioUrl, radioName)
+                }
+            }, delay)
         } else {
             console.log("Radio stopped or connection lost, not reconnecting")
         }
