@@ -4,6 +4,9 @@ const { spawn } = require("child_process")
 const yts = require("yt-search")
 const ffmpeg = require("ffmpeg-static")
 const https = require("https")
+const dotenv = require("dotenv")
+dotenv.config()
+
 
 // Read config from environment variables or config.json
 const config = {
