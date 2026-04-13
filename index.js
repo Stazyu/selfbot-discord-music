@@ -28,7 +28,7 @@ if (!config.token) {
     }
 }
 
-const ytdlpExecutable = process.platform === "win32" ? "./yt-dlp.exe" : "./yt-dlp"
+const ytdlpExecutable = process.platform === "win32" ? "./yt-dlp.exe" : "yt-dlp"
 
 async function getPlaylistVideos(url) {
     return new Promise((resolve, reject) => {
