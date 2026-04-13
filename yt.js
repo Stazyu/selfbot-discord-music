@@ -3,7 +3,7 @@ const yts = require("yt-search")
 const ffmpeg = require("ffmpeg-static")
 const YouTubeVideoId = require('youtube-video-id').default;
 
-const ytdlpExecutable = process.platform === "win32" ? "./yt-dlp.exe" : "./yt-dlp"
+const ytdlpExecutable = process.platform === "win32" ? "./yt-dlp.exe" : "yt-dlp"
 
 async function searchSong(query) {
 
