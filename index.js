@@ -2,11 +2,13 @@ const { Client } = require("discord.js-selfbot-v13")
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require("@discordjs/voice")
 const { spawn } = require("child_process")
 const yts = require("yt-search")
-const ffmpeg = require("ffmpeg-static")
+const ffmpegStatic = require("ffmpeg-static")
 const https = require("https")
 const dotenv = require("dotenv")
 dotenv.config()
 
+// Use system ffmpeg on Linux, ffmpeg-static on Windows
+const ffmpeg = process.platform === "win32" ? ffmpegStatic : "ffmpeg"
 
 // Read config from environment variables or config.json
 const config = {
