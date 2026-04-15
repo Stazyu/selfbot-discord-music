@@ -13,7 +13,8 @@ const ffmpeg = process.platform === "win32" ? ffmpegStatic : "ffmpeg"
 // Read config from environment variables or config.json
 const config = {
     prefix: process.env.DISCORD_PREFIX || "?",
-    token: process.env.DISCORD_TOKEN
+    token: process.env.DISCORD_TOKEN,
+    allowedUsers: process.env.ALLOWED_USERS ? process.env.ALLOWED_USERS.split(",") : []
 }
 
 // Fallback to config.json if env vars not set
@@ -22,6 +23,7 @@ if (!config.token) {
         const fileConfig = require("./config.json")
         config.prefix = fileConfig.prefix || config.prefix
         config.token = fileConfig.token
+        config.allowedUsers = fileConfig.allowedUsers || config.allowedUsers
     } catch (err) {
         console.error("Error: DISCORD_TOKEN environment variable or config.json required")
         process.exit(1)
@@ -369,6 +371,11 @@ async function playRadio(guild, radioUrl, radioName) {
 client.on("messageCreate", async msg => {
 
     if (!msg.content.startsWith(PREFIX)) return
+
+    // Check if user is authorized
+    if (config.allowedUsers.length > 0 && !config.allowedUsers.includes(msg.author.id)) {
+        return
+    }
 
     const args = msg.content.slice(PREFIX.length).trim().split(/ +/)
     const cmd = args.shift().toLowerCase()
