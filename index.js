@@ -87,6 +87,25 @@ client.on("ready", () => {
     console.log("✅ Logged in as", client.user.tag)
 })
 
+client.on("disconnect", () => {
+    console.log("⚠️ Discord client disconnected, attempting to reconnect...")
+    setTimeout(() => {
+        if (client.ws.status === 0) {
+            console.log("🔄 Reconnecting to Discord...")
+            client.login(TOKEN)
+        }
+    }, 5000)
+})
+
+client.on("reconnecting", () => {
+    console.log("🔄 Reconnecting to Discord...")
+})
+
+client.on("resume", (replayed) => {
+    console.log("✅ Resumed connection, replayed", replayed, "events")
+    resumeAllMusic()
+})
+
 client.on("error", (err) => {
     console.error("Discord client error:", err)
 })
@@ -97,6 +116,81 @@ process.on("unhandledRejection", (err) => {
 
 process.on("uncaughtException", (err) => {
     console.error("Uncaught exception:", err)
+})
+
+async function resumeAllMusic() {
+    console.log("🔄 Resuming all music/radio after reconnection...")
+    for (const [guildId, queue] of queues) {
+        if (!queue.voiceChannelId) continue
+
+        const guild = client.guilds.cache.get(guildId)
+        if (!guild) continue
+
+        try {
+            const voiceChannel = guild.channels.cache.get(queue.voiceChannelId)
+            if (!voiceChannel) continue
+
+            console.log(`🔄 Rejoining voice channel for guild ${guildId}`)
+
+            const connection = joinVoiceChannel({
+                channelId: voiceChannel.id,
+                guildId: guild.id,
+                adapterCreator: guild.voiceAdapterCreator
+            })
+
+            connection.subscribe(queue.player)
+            queue.connection = connection
+
+            if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
+                queue.radioReconnectAttempts = 0
+                setTimeout(() => playRadio(guild, queue.radioUrl, queue.radioName), 2000)
+            } else if (queue.songs.length > 0) {
+                setTimeout(() => playSong(guild, queue.songs[0]), 2000)
+            }
+        } catch (err) {
+            console.error(`Error resuming music for guild ${guildId}:`, err)
+        }
+    }
+}
+
+client.on("voiceStateUpdate", (oldState, newState) => {
+    if (!oldState.member) return
+    if (oldState.member.id === client.user.id && oldState.channel && !newState.channel) {
+        console.log("⚠️ Bot was kicked from voice channel")
+        const queue = queues.get(oldState.guild.id)
+        if (queue) {
+            queue.voiceChannelId = oldState.channel.id
+            queue.textChannel?.send("⚠️ Bot terkick dari VC, mencoba rejoin dalam 5 detik...")
+            setTimeout(() => {
+                const guild = client.guilds.cache.get(oldState.guild.id)
+                if (guild) {
+                    const voiceChannel = guild.channels.cache.get(oldState.channel.id)
+                    if (voiceChannel) {
+                        try {
+                            const connection = joinVoiceChannel({
+                                channelId: voiceChannel.id,
+                                guildId: guild.id,
+                                adapterCreator: guild.voiceAdapterCreator
+                            })
+                            connection.subscribe(queue.player)
+                            queue.connection = connection
+                            queue.textChannel?.send("✅ Berhasil rejoin ke VC")
+
+                            if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
+                                queue.radioReconnectAttempts = 0
+                                playRadio(guild, queue.radioUrl, queue.radioName)
+                            } else if (queue.songs.length > 0) {
+                                playSong(guild, queue.songs[0])
+                            }
+                        } catch (err) {
+                            console.error("Error rejoining voice channel:", err)
+                            queue.textChannel?.send("❌ Gagal rejoin ke VC")
+                        }
+                    }
+                }
+            }, 5000)
+        }
+    }
 })
 
 function stream(url) {
@@ -381,6 +475,7 @@ client.on("messageCreate", async msg => {
     const cmd = args.shift().toLowerCase()
     const query = args.join(" ")
 
+    if (!msg.member) return
     const voice = msg.member.voice.channel
     if (!voice) return msg.reply("Join VC dulu")
 
@@ -450,7 +545,8 @@ client.on("messageCreate", async msg => {
                 textChannel: msg.channel,
                 connection,
                 player,
-                songs: []
+                songs: [],
+                voiceChannelId: voice.id
             }
 
             queues.set(msg.guild.id, queue)
@@ -517,7 +613,8 @@ client.on("messageCreate", async msg => {
                     connection,
                     player,
                     songs: [],
-                    radioFfmpeg: null
+                    radioFfmpeg: null,
+                    voiceChannelId: voice.id
                 }
 
                 queues.set(msg.guild.id, queue)
