@@ -245,6 +245,12 @@ function isUrl(str) {
     try { new URL(str); return true; } catch { return false; }
 }
 
+function extractYouTubeVideoId(url) {
+    const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/
+    const match = url.match(regex)
+    return match ? match[1] : null
+}
+
 async function resolveRadioMetadata(query) {
     if (isUrl(query)) return { url: query, name: "Direct URL" };
 
@@ -504,11 +510,12 @@ client.on("messageCreate", async msg => {
                 msg.channel.send(`📥 Added **${songs.length}** songs from playlist`)
 
             } else {
-
-                const search = await yts(query)
+                const videoId = extractYouTubeVideoId(query)
+                const search = await yts({ videoId })
+                console.log(search)
 
                 songs.push({
-                    title: search.all[0].title,
+                    title: search.title,
                     url: query
                 })
 
