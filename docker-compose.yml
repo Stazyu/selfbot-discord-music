@@ -9,5 +9,9 @@ services:
       - NODE_ENV=production
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - DISCORD_PREFIX=${DISCORD_PREFIX:-?}
+      - ALLOWED_USERS=${ALLOWED_USERS:-}
+      - STATE_FILE=/app/data/state.json
     env_file:
       - .env
+    volumes:
+      - ./data:/app/data

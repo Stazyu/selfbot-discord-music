@@ -4,6 +4,8 @@ const { spawn } = require("child_process")
 const yts = require("yt-search")
 const ffmpegStatic = require("ffmpeg-static")
 const https = require("https")
+const fs = require("fs")
+const path = require("path")
 const dotenv = require("dotenv")
 dotenv.config()
 
@@ -82,16 +84,97 @@ const PREFIX = config.prefix
 const TOKEN = config.token
 
 const queues = new Map()
+const STATE_FILE = process.env.STATE_FILE || path.join(__dirname, "state.json")
 
-client.on("ready", () => {
+function saveState() {
+    const state = {}
+    for (const [guildId, queue] of queues) {
+        state[guildId] = {
+            voiceChannelId: queue.voiceChannelId,
+            songs: queue.songs,
+            radioUrl: queue.radioUrl,
+            radioName: queue.radioName,
+            radioStopped: queue.radioStopped,
+            textChannelId: queue.textChannel?.id
+        }
+    }
+    try {
+        fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2))
+        console.log(" State saved to", STATE_FILE)
+    } catch (err) {
+        console.error("Error saving state:", err)
+    }
+}
+
+function loadState() {
+    try {
+        if (!fs.existsSync(STATE_FILE)) {
+            console.log(" No state file found, starting fresh")
+            return
+        }
+        const data = fs.readFileSync(STATE_FILE, "utf8")
+        const state = JSON.parse(data)
+        console.log(" State loaded from", STATE_FILE)
+        return state
+    } catch (err) {
+        console.error("Error loading state:", err)
+        return null
+    }
+}
+
+client.on("ready", async () => {
     console.log("✅ Logged in as", client.user.tag)
+    const state = loadState()
+    if (state) {
+        for (const [guildId, guildState] of Object.entries(state)) {
+            const guild = client.guilds.cache.get(guildId)
+            if (!guild) continue
+
+            const voiceChannel = guild.channels.cache.get(guildState.voiceChannelId)
+            if (!voiceChannel) continue
+
+            const textChannel = client.channels.cache.get(guildState.textChannelId)
+
+            try {
+                const connection = joinVoiceChannel({
+                    channelId: voiceChannel.id,
+                    guildId: guild.id,
+                    adapterCreator: guild.voiceAdapterCreator
+                })
+
+                const player = createAudioPlayer()
+                connection.subscribe(player)
+
+                const queue = {
+                    voiceChannelId: guildState.voiceChannelId,
+                    songs: guildState.songs || [],
+                    radioUrl: guildState.radioUrl,
+                    radioName: guildState.radioName,
+                    radioStopped: guildState.radioStopped,
+                    textChannel: textChannel,
+                    player: player,
+                    connection: connection
+                }
+                queues.set(guildId, queue)
+
+                console.log(`🔄 Resuming playback for guild ${guildId}`)
+
+                if (guildState.radioUrl && guildState.radioName && !guildState.radioStopped) {
+                    setTimeout(() => playRadio(guild, guildState.radioUrl, guildState.radioName), 3000)
+                } else if (guildState.songs && guildState.songs.length > 0) {
+                    setTimeout(() => playSong(guild, guildState.songs[0]), 3000)
+                }
+            } catch (err) {
+                console.error(`Error resuming playback for guild ${guildId}:`, err)
+            }
+        }
+    }
 })
 
 client.on("disconnect", () => {
     console.log("⚠️ Discord client disconnected, attempting to reconnect...")
     setTimeout(() => {
         if (client.ws.status === 0) {
-            console.log("🔄 Reconnecting to Discord...")
             client.login(TOKEN)
         }
     }, 5000)
@@ -175,9 +258,9 @@ client.on("voiceStateUpdate", (oldState, newState) => {
                             connection.subscribe(queue.player)
                             queue.connection = connection
                             queue.textChannel?.send("✅ Berhasil rejoin ke VC")
+                            queue.radioReconnectAttempts = 0 // Reset radioReconnectAttempts
 
                             if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
-                                queue.radioReconnectAttempts = 0
                                 playRadio(guild, queue.radioUrl, queue.radioName)
                             } else if (queue.songs.length > 0) {
                                 playSong(guild, queue.songs[0])
@@ -362,6 +445,7 @@ async function playSong(guild, song) {
     })
 
     queue.textChannel.send(`🎵 Now playing **${song.title}**`)
+    saveState()
 
     queue.player.once(AudioPlayerStatus.Idle, () => {
         if (queue.currentProcesses) {
@@ -391,11 +475,7 @@ async function playRadio(guild, radioUrl, radioName) {
     queue.radioStopped = false
     queue.radioUrl = radioUrl
     queue.radioName = radioName
-
-    // Initialize reconnection counter if not exists
-    if (typeof queue.radioReconnectAttempts === 'undefined') {
-        queue.radioReconnectAttempts = 0
-    }
+    queue.radioReconnectAttempts = 0
     const MAX_RECONNECT_ATTEMPTS = 5
 
     const ff = spawnRadioFfmpeg(radioUrl)
@@ -439,6 +519,7 @@ async function playRadio(guild, radioUrl, radioName) {
     })
 
     queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
+    saveState()
 
     queue.player.once(AudioPlayerStatus.Idle, () => {
         console.log("Radio stream ended, checking if should reconnect...")
@@ -560,6 +641,7 @@ client.on("messageCreate", async msg => {
         }
 
         queue.songs.push(...songs)
+        saveState()
 
         if (queue.songs.length === songs.length) {
             playSong(msg.guild, queue.songs[0])
@@ -573,6 +655,7 @@ client.on("messageCreate", async msg => {
             queue.currentProcesses.ff.kill()
         }
         queue?.player.stop()
+        saveState()
     }
 
     if (cmd === "stop") {
@@ -588,6 +671,7 @@ client.on("messageCreate", async msg => {
         }
         queue.songs = []
         queue.player.stop()
+        saveState()
         msg.channel.send("⏹️ Berhenti memutar musik/radio")
     }
 
