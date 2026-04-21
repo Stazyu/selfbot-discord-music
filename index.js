@@ -328,8 +328,7 @@ async function playSong(guild, song) {
             queue.currentProcesses.ytdlp.kill()
             queue.currentProcesses.ff.kill()
         }
-        queue.connection.destroy()
-        queues.delete(guild.id)
+        queue.textChannel?.send("✅ Selesai memutar semua lagu")
         return
     }
 
