@@ -702,6 +702,8 @@ client.on("messageCreate", async msg => {
         }
         if (queue) {
             queue.radioStopped = true
+            queue.radioUrl = null
+            queue.radioName = null
             queue.hasReactionUI = false
         }
         queue.songs = []
