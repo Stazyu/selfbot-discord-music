@@ -91,6 +91,7 @@ function saveState() {
     for (const [guildId, queue] of queues) {
         state[guildId] = {
             voiceChannelId: queue.voiceChannelId,
+            volume: queue.volume ?? 1.0,
             songs: queue.songs,
             radioUrl: queue.radioUrl,
             radioName: queue.radioName,
@@ -153,7 +154,8 @@ client.on("ready", async () => {
                     radioStopped: guildState.radioStopped,
                     textChannel: textChannel,
                     player: player,
-                    connection: connection
+                    connection: connection,
+                    volume: guildState.volume ?? 1.0
                 }
                 queues.set(guildId, queue)
 
@@ -431,7 +433,8 @@ async function playSong(guild, song) {
 
     const audio = stream(song.url)
 
-    const resource = createAudioResource(audio)
+    const resource = createAudioResource(audio, { inlineVolume: true })
+    resource.volume.setVolume(queue.volume ?? 1.0)
 
     queue.currentProcesses = audio.processes
 
@@ -488,7 +491,8 @@ async function playRadio(guild, radioUrl, radioName) {
     const ff = spawnRadioFfmpeg(radioUrl)
     queue.radioFfmpeg = ff
 
-    const resource = createAudioResource(ff.stdout)
+    const resource = createAudioResource(ff.stdout, { inlineVolume: true })
+    resource.volume.setVolume(queue.volume ?? 1.0)
 
     queue.player.play(resource)
 
@@ -640,7 +644,8 @@ client.on("messageCreate", async msg => {
                 connection,
                 player,
                 songs: [],
-                voiceChannelId: voice.id
+                voiceChannelId: voice.id,
+                volume: 1.0
             }
 
             queues.set(msg.guild.id, queue)
@@ -718,7 +723,8 @@ client.on("messageCreate", async msg => {
                     player,
                     songs: [],
                     radioFfmpeg: null,
-                    voiceChannelId: voice.id
+                    voiceChannelId: voice.id,
+                    volume: 1.0
                 }
 
                 queues.set(msg.guild.id, queue)
@@ -738,6 +744,23 @@ client.on("messageCreate", async msg => {
         }
     }
 
+    if (cmd === "volume") {
+        if (!queue) return msg.reply("Tidak ada musik yang sedang diputar")
+        const volArg = args[0]
+        if (!volArg) return msg.reply(`Volume saat ini: **${Math.round((queue.volume ?? 1.0) * 100)}%**`)
+
+        let vol = parseFloat(volArg)
+        if (isNaN(vol)) return msg.reply("Masukkan angka antara 0-100 atau 0.0-1.0")
+        if (vol > 1) vol = vol / 100
+        if (vol < 0) vol = 0
+        if (vol > 5) vol = 5
+
+        queue.volume = vol
+        saveState()
+
+        msg.channel.send(`🔊 Volume diatur ke **${Math.round(vol * 100)}%**`)
+    }
+
     if (cmd === "help") {
         const helpEmbed = `
 🎵 **Music Selfbot Commands** 🎵
@@ -746,6 +769,7 @@ client.on("messageCreate", async msg => {
 **?play** <playlist URL> [limit] - Play a YouTube playlist (optional limit)
 **?skip** - Skip the current song
 **?stop** - Stop playing and clear the queue
+**?volume** [0-100] - Set or check playback volume
 **?radio** <station name or URL> - Play a radio station
 **?help** - Show this help message
 
