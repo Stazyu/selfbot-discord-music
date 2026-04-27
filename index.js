@@ -756,6 +756,11 @@ client.on("messageCreate", async msg => {
         if (vol > 5) vol = 5
 
         queue.volume = vol
+
+        if (queue.player.state.status === AudioPlayerStatus.Playing && queue.player.state.resource?.volume) {
+            queue.player.state.resource.volume.setVolume(vol)
+        }
+
         saveState()
 
         msg.channel.send(`🔊 Volume diatur ke **${Math.round(vol * 100)}%**`)
