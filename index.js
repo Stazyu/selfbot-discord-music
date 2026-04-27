@@ -411,6 +411,13 @@ async function playSong(guild, song) {
             queue.currentProcesses.ytdlp.kill()
             queue.currentProcesses.ff.kill()
         }
+        // Resume radio if there was one playing before
+        if (queue.radioUrl && queue.radioName) {
+            queue.radioStopped = false
+            queue.textChannel?.send("✅ Musik selesai, kembali ke radio...")
+            playRadio(guild, queue.radioUrl, queue.radioName)
+            return
+        }
         queue.textChannel?.send("✅ Selesai memutar semua lagu")
         return
     }
@@ -639,6 +646,13 @@ client.on("messageCreate", async msg => {
             queues.set(msg.guild.id, queue)
 
         }
+
+        // Stop radio if currently playing before starting YouTube (keep radioUrl to resume later)
+        if (queue.radioFfmpeg) {
+            queue.radioFfmpeg.kill()
+            queue.radioFfmpeg = null
+        }
+        queue.radioStopped = true
 
         queue.songs.push(...songs)
         saveState()
