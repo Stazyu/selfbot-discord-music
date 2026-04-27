@@ -819,11 +819,20 @@ client.on("messageCreate", async msg => {
             const messagesToDelete = messages.filter(m => m.createdTimestamp > twoWeeksAgo)
 
             if (messagesToDelete.size === 0) {
-                return msg.channel.send("ℹ️ Tidak ada pesan yang bisa dihapus (pesan lebih dari 14 hari tidak bisa dihapus bulk)")
+                return msg.channel.send("ℹ️ Tidak ada pesan yang bisa dihapus (pesan lebih dari 14 hari tidak bisa dihapus)")
             }
 
-            await textChannel.bulkDelete(messagesToDelete)
-            msg.channel.send(`✅ Berhasil menghapus **${messagesToDelete.size}** pesan`)
+            let deletedCount = 0
+            for (const [id, message] of messagesToDelete) {
+                try {
+                    await message.delete()
+                    deletedCount++
+                } catch (err) {
+                    console.error("Error deleting message:", err)
+                }
+            }
+
+            msg.channel.send(`✅ Berhasil menghapus **${deletedCount}** pesan`)
         } catch (err) {
             console.error("Error deleting messages:", err)
             msg.channel.send("❌ Gagal menghapus pesan: " + err.message)
