@@ -1,6 +1,6 @@
 async function createReactionUI(message, queue) {
 
-    const controls = ["⏯", "⏭", "�", "🔊", "⏹"]
+    const controls = ["⏯", "⏭", "🔉", "🔊", "⏹"]
 
     for (const emoji of controls)
         await message.react(emoji)
