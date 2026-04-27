@@ -796,6 +796,40 @@ client.on("messageCreate", async msg => {
         msg.channel.send(`🔊 Volume diatur ke **${Math.round(vol * 100)}%**`)
     }
 
+    if (cmd === "clearchat") {
+        if (!queue) return msg.reply("Bot belum join ke voice channel")
+
+        const textChannel = queue.textChannel
+        if (!textChannel) return msg.reply("Tidak ada text channel terkait")
+
+        const countArg = args[0]
+        let limit = 100
+        if (countArg) {
+            limit = parseInt(countArg)
+            if (isNaN(limit) || limit < 1) return msg.reply("Masukkan angka yang valid")
+            if (limit > 100) return msg.reply("Maksimal 100 pesan")
+        }
+
+        try {
+            msg.channel.send(`🗑️ Menghapus ${limit} pesan terakhir...`)
+
+            const messages = await textChannel.messages.fetch({ limit: limit })
+            const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
+
+            const messagesToDelete = messages.filter(m => m.createdTimestamp > twoWeeksAgo)
+
+            if (messagesToDelete.size === 0) {
+                return msg.channel.send("ℹ️ Tidak ada pesan yang bisa dihapus (pesan lebih dari 14 hari tidak bisa dihapus bulk)")
+            }
+
+            await textChannel.bulkDelete(messagesToDelete)
+            msg.channel.send(`✅ Berhasil menghapus **${messagesToDelete.size}** pesan`)
+        } catch (err) {
+            console.error("Error deleting messages:", err)
+            msg.channel.send("❌ Gagal menghapus pesan: " + err.message)
+        }
+    }
+
     if (cmd === "help") {
         const helpEmbed = `
 🎵 **Music Selfbot Commands** 🎵
@@ -806,6 +840,7 @@ client.on("messageCreate", async msg => {
 **?stop** - Stop playing and clear the queue
 **?volume** [0-100] - Set or check playback volume
 **?radio** <station name or URL> - Play a radio station
+**?clearchat** [number] - Delete messages in text channel (default 100, max 100)
 **?help** - Show this help message
 
 *You must be in a voice channel to use these commands*
