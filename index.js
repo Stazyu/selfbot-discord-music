@@ -416,12 +416,11 @@ async function playSong(guild, song) {
             queue.currentProcesses.ytdlp.kill()
             queue.currentProcesses.ff.kill()
         }
-        if (queue.reactionCollector) {
+        if (queue.reactionCollector && typeof queue.reactionCollector.stop === "function") {
             queue.reactionCollector.stop()
             queue.reactionCollector = null
         }
         queue.hasReactionUI = false
-        // Resume radio if there was one playing before
         if (queue.radioUrl && queue.radioName) {
             queue.radioStopped = false
             queue.textChannel?.send("✅ Musik selesai, kembali ke radio...")
@@ -462,7 +461,7 @@ async function playSong(guild, song) {
         queue.player.stop()
     })
 
-    const nowPlayingMsg = await queue.textChannel.send(`🎵 Now playing **${song.title}**`)
+    const nowPlayingMsg = await queue.textChannel.send(`🎵 Now playing **${song.title}** 🎵`)
     if (!queue.hasReactionUI) {
         queue.reactionCollector = createReactionUI(nowPlayingMsg, queue)
         queue.hasReactionUI = true
