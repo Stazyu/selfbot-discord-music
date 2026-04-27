@@ -637,7 +637,11 @@ client.on("messageCreate", async msg => {
                     url: query
                 })
 
-                msg.channel.send(`📥 Added **${songs[0].title}**`)
+                const addedMsg = await msg.channel.send(`📥 Added **${songs[0].title}**`)
+                if (!queue.hasReactionUI) {
+                    queue.reactionCollector = createReactionUI(addedMsg, queue)
+                    queue.hasReactionUI = true
+                }
 
             }
 
@@ -650,7 +654,11 @@ client.on("messageCreate", async msg => {
                 url: search.videos[0].url
             })
 
-            msg.channel.send(`📥 Added **${songs[0].title}**`)
+            const addedMsg = await msg.channel.send(`📥 Added **${songs[0].title}**`)
+            if (!queue.hasReactionUI) {
+                queue.reactionCollector = createReactionUI(addedMsg, queue)
+                queue.hasReactionUI = true
+            }
 
         }
 
