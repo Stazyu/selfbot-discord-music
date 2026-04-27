@@ -496,6 +496,7 @@ async function playRadio(guild, radioUrl, radioName) {
     queue.radioUrl = radioUrl
     queue.radioName = radioName
     queue.radioReconnectAttempts = 0
+    queue.reconnectMessage = null
     const MAX_RECONNECT_ATTEMPTS = 5
 
     const ff = spawnRadioFfmpeg(radioUrl)
@@ -506,7 +507,7 @@ async function playRadio(guild, radioUrl, radioName) {
 
     queue.player.play(resource)
 
-    queue.player.on("error", (err) => {
+    queue.player.on("error", async (err) => {
         console.error("Radio player error:", err)
         if (!queue.radioStopped) {
             queue.radioReconnectAttempts++
@@ -518,7 +519,13 @@ async function playRadio(guild, radioUrl, radioName) {
             }
 
             const delay = Math.min(5000 * Math.pow(2, queue.radioReconnectAttempts - 1), 30000)
-            queue.textChannel.send(`❌ Error playing radio, mencoba reconnect (${queue.radioReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) dalam ${delay / 1000} detik...`)
+            const reconnectText = `❌ Error playing radio, mencoba reconnect (${queue.radioReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) dalam ${delay / 1000} detik...`
+
+            if (queue.reconnectMessage) {
+                queue.reconnectMessage.edit(reconnectText).catch(console.error)
+            } else {
+                queue.reconnectMessage = await queue.textChannel.send(reconnectText)
+            }
 
             setTimeout(() => {
                 const currentQueue = queues.get(guild.id)
@@ -543,6 +550,10 @@ async function playRadio(guild, radioUrl, radioName) {
     if (!queue.hasReactionUI) {
         queue.reactionCollector = createReactionUI(radioMsg, queue)
         queue.hasReactionUI = true
+    }
+    if (queue.reconnectMessage) {
+        queue.reconnectMessage.edit("✅ Berhasil reconnect radio").catch(console.error)
+        queue.reconnectMessage = null
     }
     saveState()
 
