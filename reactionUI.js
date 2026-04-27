@@ -37,7 +37,7 @@ async function createReactionUI(message, queue) {
 
                 break
 
-            case "�":
+            case "🔉":
 
                 queue.volume = Math.max(0, (queue.volume ?? 1.0) - 0.1)
                 if (queue.player.state.status === "playing" && queue.player.state.resource?.volume) {
