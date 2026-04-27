@@ -414,6 +414,11 @@ async function playSong(guild, song) {
             queue.currentProcesses.ytdlp.kill()
             queue.currentProcesses.ff.kill()
         }
+        if (queue.reactionCollector) {
+            queue.reactionCollector.stop()
+            queue.reactionCollector = null
+        }
+        queue.hasReactionUI = false
         // Resume radio if there was one playing before
         if (queue.radioUrl && queue.radioName) {
             queue.radioStopped = false
@@ -456,7 +461,10 @@ async function playSong(guild, song) {
     })
 
     const nowPlayingMsg = await queue.textChannel.send(`🎵 Now playing **${song.title}**`)
-    createReactionUI(nowPlayingMsg, queue)
+    if (!queue.hasReactionUI) {
+        queue.reactionCollector = createReactionUI(nowPlayingMsg, queue)
+        queue.hasReactionUI = true
+    }
     saveState()
 
     queue.player.once(AudioPlayerStatus.Idle, () => {
@@ -532,7 +540,10 @@ async function playRadio(guild, radioUrl, radioName) {
     })
 
     const radioMsg = await queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
-    createReactionUI(radioMsg, queue)
+    if (!queue.hasReactionUI) {
+        queue.reactionCollector = createReactionUI(radioMsg, queue)
+        queue.hasReactionUI = true
+    }
     saveState()
 
     queue.player.once(AudioPlayerStatus.Idle, () => {
@@ -648,7 +659,8 @@ client.on("messageCreate", async msg => {
                 player,
                 songs: [],
                 voiceChannelId: voice.id,
-                volume: 1.0
+                volume: 1.0,
+                hasReactionUI: false
             }
 
             queues.set(msg.guild.id, queue)
@@ -690,6 +702,7 @@ client.on("messageCreate", async msg => {
         }
         if (queue) {
             queue.radioStopped = true
+            queue.hasReactionUI = false
         }
         queue.songs = []
         queue.player.stop()
@@ -727,7 +740,8 @@ client.on("messageCreate", async msg => {
                     songs: [],
                     radioFfmpeg: null,
                     voiceChannelId: voice.id,
-                    volume: 1.0
+                    volume: 1.0,
+                    hasReactionUI: false
                 }
 
                 queues.set(msg.guild.id, queue)

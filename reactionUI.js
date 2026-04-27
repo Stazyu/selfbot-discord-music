@@ -2,16 +2,23 @@ async function createReactionUI(message, queue) {
 
     const controls = ["⏯", "⏭", "🔉", "🔊", "⏹"]
 
-    for (const emoji of controls)
-        await message.react(emoji)
+    console.log("Creating reaction UI for message:", message.id)
+
+    try {
+        for (const emoji of controls) {
+            await message.react(emoji)
+        }
+        console.log("Reactions added successfully")
+    } catch (err) {
+        console.error("Error adding reactions:", err)
+    }
 
     const filter = (reaction, user) => {
         return controls.includes(reaction.emoji.name) && !user.bot
     }
 
     const collector = message.createReactionCollector({
-        filter,
-        time: 1000 * 60 * 60
+        filter
     })
 
     collector.on("collect", (reaction, user) => {
@@ -69,11 +76,14 @@ async function createReactionUI(message, queue) {
                 queue.songs = []
                 queue.radioStopped = true
                 queue.player.stop()
+                collector.stop()
 
                 break
         }
 
     })
+
+    return collector
 }
 
 module.exports = { createReactionUI }
