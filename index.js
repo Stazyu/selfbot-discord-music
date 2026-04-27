@@ -7,6 +7,7 @@ const https = require("https")
 const fs = require("fs")
 const path = require("path")
 const dotenv = require("dotenv")
+const { createReactionUI } = require("./reactionUI")
 dotenv.config()
 
 // Use system ffmpeg on Linux, ffmpeg-static on Windows
@@ -454,7 +455,8 @@ async function playSong(guild, song) {
         queue.player.stop()
     })
 
-    queue.textChannel.send(`🎵 Now playing **${song.title}**`)
+    const nowPlayingMsg = await queue.textChannel.send(`🎵 Now playing **${song.title}**`)
+    createReactionUI(nowPlayingMsg, queue)
     saveState()
 
     queue.player.once(AudioPlayerStatus.Idle, () => {
@@ -529,7 +531,8 @@ async function playRadio(guild, radioUrl, radioName) {
         queue.radioReconnectAttempts = 0
     })
 
-    queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
+    const radioMsg = await queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
+    createReactionUI(radioMsg, queue)
     saveState()
 
     queue.player.once(AudioPlayerStatus.Idle, () => {

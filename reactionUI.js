@@ -1,6 +1,6 @@
 async function createReactionUI(message, queue) {
 
-    const controls = ["⏯", "⏭", "🔁", "⏹"]
+    const controls = ["⏯", "⏭", "�", "🔊", "⏹"]
 
     for (const emoji of controls)
         await message.react(emoji)
@@ -29,20 +29,46 @@ async function createReactionUI(message, queue) {
 
             case "⏭":
 
+                if (queue.currentProcesses) {
+                    queue.currentProcesses.ytdlp.kill()
+                    queue.currentProcesses.ff.kill()
+                }
                 queue.player.stop()
 
                 break
 
-            case "🔁":
+            case "�":
 
-                queue.loop = !queue.loop
-                message.channel.send(`Loop: ${queue.loop}`)
+                queue.volume = Math.max(0, (queue.volume ?? 1.0) - 0.1)
+                if (queue.player.state.status === "playing" && queue.player.state.resource?.volume) {
+                    queue.player.state.resource.volume.setVolume(queue.volume)
+                }
+                message.channel.send(`🔉 Volume: **${Math.round(queue.volume * 100)}%**`)
+
+                break
+
+            case "🔊":
+
+                queue.volume = Math.min(5, (queue.volume ?? 1.0) + 0.1)
+                if (queue.player.state.status === "playing" && queue.player.state.resource?.volume) {
+                    queue.player.state.resource.volume.setVolume(queue.volume)
+                }
+                message.channel.send(`🔊 Volume: **${Math.round(queue.volume * 100)}%**`)
 
                 break
 
             case "⏹":
 
-                queue.stop()
+                if (queue.currentProcesses) {
+                    queue.currentProcesses.ytdlp.kill()
+                    queue.currentProcesses.ff.kill()
+                }
+                if (queue.radioFfmpeg) {
+                    queue.radioFfmpeg.kill()
+                }
+                queue.songs = []
+                queue.radioStopped = true
+                queue.player.stop()
 
                 break
         }
