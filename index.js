@@ -723,6 +723,29 @@ client.on("messageCreate", async msg => {
         msg.channel.send("⏹️ Berhenti memutar musik/radio")
     }
 
+    if (cmd === "leave") {
+        if (!queue) return msg.reply("Bot belum join ke voice channel")
+
+        if (queue.currentProcesses) {
+            queue.currentProcesses.ytdlp.kill()
+            queue.currentProcesses.ff.kill()
+        }
+        if (queue.radioFfmpeg) {
+            queue.radioFfmpeg.kill()
+        }
+        if (queue.reactionCollector) {
+            queue.reactionCollector.stop()
+            queue.reactionCollector = null
+        }
+
+        msg.channel.send("👋 Keluar dari voice channel")
+        queue.songs = []
+        queue.player.stop()
+        queue.connection.destroy()
+        queues.delete(msg.guild.id)
+        saveState()
+    }
+
     if (cmd === "radio") {
         if (!query) {
             return msg.reply("Usage: ?radio <station name or URL>")
@@ -850,6 +873,7 @@ client.on("messageCreate", async msg => {
 **?volume** [0-100] - Set or check playback volume
 **?radio** <station name or URL> - Play a radio station
 **?clearchat** [number] - Delete messages in text channel (default 100, max 100)
+**?leave** - Leave voice channel and clear queue
 **?help** - Show this help message
 
 *You must be in a voice channel to use these commands*
