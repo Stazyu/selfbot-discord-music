@@ -1,15 +1,21 @@
 # Use Node.js LTS
 FROM node:20-slim
 
+# Set timezone
+ENV TZ=Asia/Jakarta
+
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies + tzdata
 RUN apt-get update && apt-get install -y \
     curl \
     ffmpeg \
     python3 \
     python3-pip \
+    tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 # Download yt-dlp
