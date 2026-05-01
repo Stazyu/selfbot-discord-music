@@ -8,6 +8,7 @@ const fs = require("fs")
 const path = require("path")
 const dotenv = require("dotenv")
 const { createReactionUI } = require("./reactionUI")
+const icy = require("icy")
 dotenv.config()
 
 // Use system ffmpeg on Linux, ffmpeg-static on Windows
@@ -442,6 +443,87 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
     return ff;
 }
 
+// Function to detect current song from radio stream metadata using FFmpeg
+function startRadioMetadataDetection(radioUrl, queue) {
+    let currentSong = null;
+    let metadataInterval = null;
+
+    function detectMetadata() {
+        if (queue.radioStopped) {
+            if (metadataInterval) {
+                clearInterval(metadataInterval);
+                metadataInterval = null;
+            }
+            return;
+        }
+
+        const ff = spawn(ffmpeg, [
+            '-analyzeduration', '10000000',
+            '-probesize', '50000000',
+            '-i', radioUrl,
+            '-f', 'null',
+            '-'
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+        let stderr = '';
+        ff.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        ff.on('close', () => {
+            if (queue.radioStopped) return;
+
+            // Try to extract song title from FFmpeg output
+            const titleMatch = stderr.match(/title\s*:\s*(.+)/i);
+            const artistMatch = stderr.match(/artist\s*:\s*(.+)/i);
+            const metadataMatch = stderr.match(/StreamTitle='([^']+)'/i);
+
+            let songTitle = null;
+
+            if (metadataMatch) {
+                songTitle = metadataMatch[1];
+            } else if (titleMatch && artistMatch) {
+                songTitle = `${artistMatch[1]} - ${titleMatch[1]}`;
+            } else if (titleMatch) {
+                songTitle = titleMatch[1];
+            }
+
+            if (songTitle && songTitle !== currentSong) {
+                currentSong = songTitle;
+                console.log(`[radio] Detected song: ${currentSong}`);
+
+                // Update the radio message with current song info
+                if (queue.radioMessage) {
+                    queue.radioMessage.edit(`📻 Now playing radio: **${queue.radioName}**\n🎵 Now playing: **${currentSong}**`).catch(console.error);
+                }
+            }
+        });
+
+        ff.on('error', (err) => {
+            console.log('[radio] Metadata detection error:', err.message);
+        });
+
+        // Kill FFmpeg after 5 seconds if it doesn't finish
+        setTimeout(() => {
+            ff.kill();
+        }, 5000);
+    }
+
+    // Try to detect metadata immediately
+    detectMetadata();
+    // Then check every 10 seconds for updates
+    metadataInterval = setInterval(detectMetadata, 10000);
+
+    return {
+        stop: () => {
+            if (metadataInterval) {
+                clearInterval(metadataInterval);
+                metadataInterval = null;
+            }
+        }
+    };
+}
+
 async function playSong(guild, song) {
 
     const queue = queues.get(guild.id)
@@ -538,6 +620,12 @@ async function playRadio(guild, radioUrl, radioName) {
     queue.isReconnecting = false
     const MAX_RECONNECT_ATTEMPTS = 5
 
+    // Stop existing metadata detection if any
+    if (queue.metadataDetector) {
+        queue.metadataDetector.stop()
+        queue.metadataDetector = null
+    }
+
     const codec = await detectStreamCodec(radioUrl)
     const ff = spawnRadioFfmpeg(radioUrl, codec, (code) => {
         if (code !== 0 && code !== null && !queue.radioStopped && !queue.isReconnecting) {
@@ -596,6 +684,7 @@ async function playRadio(guild, radioUrl, radioName) {
     })
 
     const radioMsg = await queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
+    queue.radioMessage = radioMsg
     if (!queue.hasReactionUI) {
         queue.reactionCollector = createReactionUI(radioMsg, queue)
         queue.hasReactionUI = true
@@ -604,6 +693,10 @@ async function playRadio(guild, radioUrl, radioName) {
         queue.reconnectMessage.edit("✅ Berhasil reconnect radio").catch(console.error)
         queue.reconnectMessage = null
     }
+
+    // Start metadata detection for current song
+    queue.metadataDetector = startRadioMetadataDetection(radioUrl, queue)
+
     saveState()
 }
 
@@ -745,12 +838,17 @@ client.on("messageCreate", async msg => {
         if (queue?.radioFfmpeg) {
             queue.radioFfmpeg.kill()
         }
+        if (queue?.metadataDetector) {
+            queue.metadataDetector.stop()
+            queue.metadataDetector = null
+        }
         if (queue) {
             queue.radioStopped = true
             queue.isReconnecting = false
             queue.radioUrl = null
             queue.radioName = null
             queue.hasReactionUI = false
+            queue.radioMessage = null
         }
         queue.songs = []
         queue.player.stop()
@@ -767,6 +865,10 @@ client.on("messageCreate", async msg => {
         }
         if (queue.radioFfmpeg) {
             queue.radioFfmpeg.kill()
+        }
+        if (queue.metadataDetector) {
+            queue.metadataDetector.stop()
+            queue.metadataDetector = null
         }
         if (queue.reactionCollector) {
             queue.reactionCollector.stop()

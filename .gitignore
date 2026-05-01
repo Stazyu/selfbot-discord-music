@@ -53,3 +53,5 @@ temp/
 # yt-dlp executable (if downloaded separately)
 yt-dlp
 yt-dlp.exe
+
+state.json
