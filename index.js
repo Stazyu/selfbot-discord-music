@@ -889,12 +889,55 @@ client.on("messageCreate", async msg => {
 **?radio** <station name or URL> - Play a radio station
 **?clearchat** [number] - Delete messages in text channel (default 100, max 100)
 **?leave** - Leave voice channel and clear queue
+**?state** - Show current bot state
 **?help** - Show this help message
 
 *You must be in a voice channel to use these commands*
         `.trim()
 
         msg.channel.send(helpEmbed)
+    }
+
+    if (cmd === "state") {
+        let stateMsg = "📊 **Current Bot State**\n\n"
+
+        if (queues.size === 0) {
+            stateMsg += "❌ No active queues"
+        } else {
+            for (const [guildId, queue] of queues) {
+                const guild = client.guilds.cache.get(guildId)
+                const guildName = guild ? guild.name : "Unknown Guild"
+                stateMsg += `🏠 **Guild:** ${guildName} (${guildId})\n`
+                stateMsg += `   📢 **Voice Channel:** ${queue.voiceChannelId}\n`
+                stateMsg += `   💬 **Text Channel:** ${queue.textChannel?.id || "N/A"}\n`
+                stateMsg += `   🔊 **Volume:** ${Math.round((queue.volume ?? 1.0) * 100)}%\n`
+
+                if (queue.radioUrl && queue.radioName) {
+                    stateMsg += `   📻 **Radio:** ${queue.radioName}\n`
+                    stateMsg += `   📻 **Radio URL:** ${queue.radioUrl}\n`
+                    stateMsg += `   ⏸️ **Radio Stopped:** ${queue.radioStopped ? "Yes" : "No"}\n`
+                }
+
+                if (queue.songs && queue.songs.length > 0) {
+                    stateMsg += `   🎵 **Songs in Queue:** ${queue.songs.length}\n`
+                    queue.songs.slice(0, 5).forEach((song, index) => {
+                        stateMsg += `      ${index + 1}. ${song.title}\n`
+                    })
+                    if (queue.songs.length > 5) {
+                        stateMsg += `      ... and ${queue.songs.length - 5} more\n`
+                    }
+                } else {
+                    stateMsg += `   🎵 **Songs in Queue:** 0\n`
+                }
+
+                stateMsg += "\n"
+            }
+        }
+
+        stateMsg += `\n💾 **State File:** ${STATE_FILE}`
+        stateMsg += `\n✅ **Total Active Queues:** ${queues.size}`
+
+        msg.channel.send(stateMsg)
     }
 
 })
