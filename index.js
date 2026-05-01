@@ -598,6 +598,8 @@ client.on("messageCreate", async msg => {
     const cmd = args.shift().toLowerCase()
     const query = args.join(" ")
 
+    console.log(`\x1b[36m[COMMAND]\x1b[0m \x1b[33m${cmd}\x1b[0m | \x1b[35m👤 User:\x1b[0m ${msg.author.tag} (${msg.author.id}) | \x1b[34m💬 Channel:\x1b[0m ${msg.channel.name} (${msg.channel.id}) | \x1b[32m📝 Query:\x1b[0m ${query || "N/A"}`)
+
     if (!msg.member) return
     const voice = msg.member.voice.channel
     if (!voice) return msg.reply("Join VC dulu")
