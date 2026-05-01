@@ -75,6 +75,7 @@ async function createReactionUI(message, queue) {
                 }
                 queue.songs = []
                 queue.radioStopped = true
+                queue.isReconnecting = false
                 queue.player.stop()
                 collector.stop()
 

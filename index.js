@@ -369,7 +369,38 @@ async function resolveRadioMetadata(query) {
     });
 }
 
-function spawnRadioFfmpeg(inputUrl) {
+async function detectStreamCodec(inputUrl) {
+    return new Promise((resolve) => {
+        const ff = spawn(ffmpeg, [
+            '-analyzeduration', '5000000',
+            '-probesize', '10000000',
+            '-i', inputUrl,
+            '-f', 'null',
+            '-'
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+        let stderr = '';
+        ff.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        ff.on('close', () => {
+            const audioMatch = stderr.match(/Stream #\d+:\d+.*Audio:\s*(\w+)/i);
+            const codec = audioMatch ? audioMatch[1].toLowerCase() : null;
+            console.log(`[radio] Detected codec: ${codec || 'unknown'}`);
+            resolve(codec);
+        });
+
+        ff.on('error', () => resolve(null));
+
+        setTimeout(() => {
+            ff.kill();
+            resolve(null);
+        }, 5000);
+    });
+}
+
+function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
     const args = [
         '-reconnect', '1',
         '-reconnect_streamed', '1',
@@ -377,13 +408,16 @@ function spawnRadioFfmpeg(inputUrl) {
         '-analyzeduration', '10000000',
         '-probesize', '50000000',
         '-i', inputUrl,
-        '-vn',
-        '-f', 'opus',
-        '-ar', '48000',
-        '-ac', '2',
-        '-b:a', '128k',
-        'pipe:1'
+        '-vn'
     ];
+
+    if (codec === 'opus') {
+        args.push('-c:a', 'copy');
+    } else {
+        args.push('-f', 'opus', '-ar', '48000', '-ac', '2', '-b:a', '128k');
+    }
+
+    args.push('pipe:1');
 
     const ff = spawn(ffmpeg, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
@@ -395,7 +429,8 @@ function spawnRadioFfmpeg(inputUrl) {
 
     ff.on('close', (code) => {
         console.log('[radio] ffmpeg closed with code', code);
-        if (code !== 0 && code !== null) {
+        if (onClose) onClose(code);
+        if (code !== 0 && code !== null && code !== 1) {
             console.error('[radio] ffmpeg exited with error code:', code);
         }
     });
@@ -500,9 +535,42 @@ async function playRadio(guild, radioUrl, radioName) {
     queue.radioName = radioName
     queue.radioReconnectAttempts = 0
     queue.reconnectMessage = null
+    queue.isReconnecting = false
     const MAX_RECONNECT_ATTEMPTS = 5
 
-    const ff = spawnRadioFfmpeg(radioUrl)
+    const codec = await detectStreamCodec(radioUrl)
+    const ff = spawnRadioFfmpeg(radioUrl, codec, (code) => {
+        if (code !== 0 && code !== null && !queue.radioStopped && !queue.isReconnecting) {
+            console.log('[radio] ffmpeg closed unexpectedly, triggering reconnect...');
+            queue.isReconnecting = true
+            queue.radioReconnectAttempts++
+
+            if (queue.radioReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                queue.textChannel.send(`❌ Radio stream terputus setelah ${MAX_RECONNECT_ATTEMPTS} percobaan reconnect. Mohon coba lagi nanti.`)
+                queue.radioStopped = true
+                queue.isReconnecting = false
+                return
+            }
+
+            const delay = Math.min(5000 * Math.pow(2, queue.radioReconnectAttempts - 1), 30000)
+            const reconnectText = `❌ Radio stream terputus, mencoba reconnect (${queue.radioReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) dalam ${delay / 1000} detik...`
+
+            if (queue.reconnectMessage) {
+                queue.reconnectMessage.edit(reconnectText).catch(console.error)
+            } else {
+                queue.reconnectMessage = queue.textChannel.send(reconnectText)
+            }
+
+            setTimeout(() => {
+                const currentQueue = queues.get(guild.id)
+                if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
+                    playRadio(guild, radioUrl, radioName)
+                } else {
+                    queue.isReconnecting = false
+                }
+            }, delay)
+        }
+    })
     queue.radioFfmpeg = ff
 
     const resource = createAudioResource(ff.stdout, { inlineVolume: true })
@@ -512,31 +580,6 @@ async function playRadio(guild, radioUrl, radioName) {
 
     queue.player.on("error", async (err) => {
         console.error("Radio player error:", err)
-        if (!queue.radioStopped) {
-            queue.radioReconnectAttempts++
-
-            if (queue.radioReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-                queue.textChannel.send(`❌ Gagal reconnect radio setelah ${MAX_RECONNECT_ATTEMPTS} percobaan. Mohon coba lagi nanti.`)
-                queue.radioStopped = true
-                return
-            }
-
-            const delay = Math.min(5000 * Math.pow(2, queue.radioReconnectAttempts - 1), 30000)
-            const reconnectText = `❌ Error playing radio, mencoba reconnect (${queue.radioReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) dalam ${delay / 1000} detik...`
-
-            if (queue.reconnectMessage) {
-                queue.reconnectMessage.edit(reconnectText).catch(console.error)
-            } else {
-                queue.reconnectMessage = await queue.textChannel.send(reconnectText)
-            }
-
-            setTimeout(() => {
-                const currentQueue = queues.get(guild.id)
-                if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
-                    playRadio(guild, radioUrl, radioName)
-                }
-            }, delay)
-        }
     })
 
     queue.connection.on("error", (err) => {
@@ -546,6 +589,7 @@ async function playRadio(guild, radioUrl, radioName) {
             queue.radioFfmpeg.kill()
         }
         queue.radioStopped = true
+        queue.isReconnecting = false
         queue.radioReconnectAttempts = 0
         queues.delete(guild.id)
         saveState()
@@ -561,32 +605,6 @@ async function playRadio(guild, radioUrl, radioName) {
         queue.reconnectMessage = null
     }
     saveState()
-
-    queue.player.once(AudioPlayerStatus.Idle, () => {
-        console.log("Radio stream ended, checking if should reconnect...")
-        const currentQueue = queues.get(guild.id)
-        if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
-            queue.radioReconnectAttempts++
-
-            if (queue.radioReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-                queue.textChannel.send(`❌ Radio stream terputus setelah ${MAX_RECONNECT_ATTEMPTS} percobaan reconnect. Mohon coba lagi nanti.`)
-                queue.radioStopped = true
-                return
-            }
-
-            const delay = Math.min(5000 * Math.pow(2, queue.radioReconnectAttempts - 1), 30000)
-            console.log(`Radio stream ended, reconnecting in ${delay / 1000}s (attempt ${queue.radioReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`)
-
-            setTimeout(() => {
-                const currentQueue = queues.get(guild.id)
-                if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
-                    playRadio(guild, radioUrl, radioName)
-                }
-            }, delay)
-        } else {
-            console.log("Radio stopped or connection lost, not reconnecting")
-        }
-    })
 }
 
 client.on("messageCreate", async msg => {
@@ -699,6 +717,7 @@ client.on("messageCreate", async msg => {
             queue.radioFfmpeg = null
         }
         queue.radioStopped = true
+        queue.isReconnecting = false
 
         queue.songs.push(...songs)
         saveState()
@@ -728,6 +747,7 @@ client.on("messageCreate", async msg => {
         }
         if (queue) {
             queue.radioStopped = true
+            queue.isReconnecting = false
             queue.radioUrl = null
             queue.radioName = null
             queue.hasReactionUI = false
