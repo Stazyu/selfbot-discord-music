@@ -98,7 +98,8 @@ function saveState() {
             radioUrl: queue.radioUrl,
             radioName: queue.radioName,
             radioStopped: queue.radioStopped,
-            textChannelId: queue.textChannel?.id
+            textChannelId: queue.textChannel?.id,
+            playHistory: queue.playHistory || []
         }
     }
     try {
@@ -157,7 +158,8 @@ client.on("ready", async () => {
                     textChannel: textChannel,
                     player: player,
                     connection: connection,
-                    volume: guildState.volume ?? 1.0
+                    volume: guildState.volume ?? 1.0,
+                    playHistory: guildState.playHistory || []
                 }
                 queues.set(guildId, queue)
 
@@ -470,6 +472,20 @@ async function playSong(guild, song) {
 
     console.log("🎵 Playing:", song)
 
+    // Add to play history
+    if (!queue.playHistory) {
+        queue.playHistory = []
+    }
+    queue.playHistory.unshift({
+        title: song.title,
+        url: song.url,
+        playedAt: new Date().toISOString()
+    })
+    // Keep only last 10 songs in history
+    if (queue.playHistory.length > 10) {
+        queue.playHistory = queue.playHistory.slice(0, 10)
+    }
+
     if (queue.currentProcesses) {
         queue.currentProcesses.ytdlp.kill()
         queue.currentProcesses.ff.kill()
@@ -717,7 +733,8 @@ client.on("messageCreate", async msg => {
                 songs: [],
                 voiceChannelId: voice.id,
                 volume: 1.0,
-                hasReactionUI: false
+                hasReactionUI: false,
+                playHistory: []
             }
 
             queues.set(msg.guild.id, queue)
@@ -834,7 +851,8 @@ client.on("messageCreate", async msg => {
                     radioFfmpeg: null,
                     voiceChannelId: voice.id,
                     volume: 1.0,
-                    hasReactionUI: false
+                    hasReactionUI: false,
+                    playHistory: []
                 }
 
                 queues.set(msg.guild.id, queue)
@@ -970,6 +988,20 @@ client.on("messageCreate", async msg => {
                     }
                 } else {
                     stateMsg += `   🎵 **Songs in Queue:** 0\n`
+                }
+
+                // Show play history (last 5 songs)
+                if (queue.playHistory && queue.playHistory.length > 0) {
+                    stateMsg += `   📜 **Recently Played (Last 5):**\n`
+                    queue.playHistory.slice(0, 5).forEach((song, index) => {
+                        const playTime = new Date(song.playedAt).toLocaleTimeString('id-ID', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })
+                        stateMsg += `      ${index + 1}. ${song.title} (${playTime})\n`
+                    })
+                } else {
+                    stateMsg += `   📜 **Recently Played:** None\n`
                 }
 
                 stateMsg += "\n"
