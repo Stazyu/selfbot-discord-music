@@ -479,7 +479,8 @@ async function playSong(guild, song) {
     queue.playHistory.unshift({
         title: song.title,
         url: song.url,
-        playedAt: new Date().toISOString()
+        playedAt: new Date().toISOString(),
+        isRadio: false
     })
     // Keep only last 10 songs in history
     if (queue.playHistory.length > 10) {
@@ -971,6 +972,15 @@ client.on("messageCreate", async msg => {
                 stateMsg += `   📢 **Voice Channel:** ${queue.voiceChannelId}\n`
                 stateMsg += `   💬 **Text Channel:** ${queue.textChannel?.id || "N/A"}\n`
                 stateMsg += `   🔊 **Volume:** ${Math.round((queue.volume ?? 1.0) * 100)}%\n`
+
+                // Show currently playing
+                if (queue.songs && queue.songs.length > 0 && !queue.radioStopped) {
+                    stateMsg += `   🎶 **Now Playing:** ${queue.songs[0].title}\n`
+                } else if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
+                    stateMsg += `   📻 **Now Playing Radio:** ${queue.radioName}\n`
+                } else {
+                    stateMsg += `   ⏸️ **Now Playing:** Nothing\n`
+                }
 
                 if (queue.radioUrl && queue.radioName) {
                     stateMsg += `   📻 **Radio:** ${queue.radioName}\n`

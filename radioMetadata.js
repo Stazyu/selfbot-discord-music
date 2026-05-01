@@ -52,6 +52,21 @@ function startRadioMetadataDetection(radioUrl, queue) {
                 currentSong = songTitle;
                 console.log(`[radio] Detected song: ${currentSong}`);
 
+                // Add to play history
+                if (!queue.playHistory) {
+                    queue.playHistory = []
+                }
+                queue.playHistory.unshift({
+                    title: songTitle,
+                    url: queue.radioUrl,
+                    playedAt: new Date().toISOString(),
+                    isRadio: true
+                })
+                // Keep only last 10 songs in history
+                if (queue.playHistory.length > 10) {
+                    queue.playHistory = queue.playHistory.slice(0, 10)
+                }
+
                 // Update the radio message with current song info
                 if (queue.radioMessage) {
                     queue.radioMessage.edit(`📻 Now playing radio: **${queue.radioName}**\n🎵 Now playing: **${currentSong}**`).catch(console.error);
