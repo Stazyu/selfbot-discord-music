@@ -167,8 +167,12 @@ client.on("ready", async () => {
                 console.log(`🔄 Resuming playback for guild ${guildId}`)
 
                 if (guildState.radioUrl && guildState.radioName && !guildState.radioStopped) {
+                    console.log(`🔄 Resuming radio on startup: ${guildState.radioName}`)
+                    queue.textChannel?.send("🔄 Reconnecting to radio after startup...")
                     setTimeout(() => playRadio(guild, guildState.radioUrl, guildState.radioName), 3000)
                 } else if (guildState.songs && guildState.songs.length > 0) {
+                    console.log(`🔄 Resuming music queue on startup`)
+                    queue.textChannel?.send("🔄 Resuming music after startup...")
                     setTimeout(() => playSong(guild, guildState.songs[0]), 3000)
                 }
             } catch (err) {
@@ -208,6 +212,41 @@ process.on("uncaughtException", (err) => {
     console.error("Uncaught exception:", err)
 })
 
+// Graceful shutdown handler
+process.on("SIGTERM", () => {
+    console.log("Received SIGTERM, shutting down gracefully...")
+    for (const [guildId, queue] of queues) {
+        if (queue.radioFfmpeg) {
+            queue.radioFfmpeg.kill()
+        }
+        if (queue.currentProcesses) {
+            queue.currentProcesses.ytdlp.kill()
+            queue.currentProcesses.ff.kill()
+        }
+        if (queue.metadataDetector) {
+            queue.metadataDetector.stop()
+        }
+    }
+    process.exit(0)
+})
+
+process.on("SIGINT", () => {
+    console.log("Received SIGINT, shutting down gracefully...")
+    for (const [guildId, queue] of queues) {
+        if (queue.radioFfmpeg) {
+            queue.radioFfmpeg.kill()
+        }
+        if (queue.currentProcesses) {
+            queue.currentProcesses.ytdlp.kill()
+            queue.currentProcesses.ff.kill()
+        }
+        if (queue.metadataDetector) {
+            queue.metadataDetector.stop()
+        }
+    }
+    process.exit(0)
+})
+
 async function resumeAllMusic() {
     console.log("🔄 Resuming all music/radio after reconnection...")
     for (const [guildId, queue] of queues) {
@@ -231,14 +270,23 @@ async function resumeAllMusic() {
             connection.subscribe(queue.player)
             queue.connection = connection
 
+            // Reset reconnection flags and attempts
+            queue.isReconnecting = false
+            queue.radioReconnectAttempts = 0
+            queue.reconnectMessage = null
+
             if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
-                queue.radioReconnectAttempts = 0
-                setTimeout(() => playRadio(guild, queue.radioUrl, queue.radioName), 2000)
+                console.log(`🔄 Resuming radio: ${queue.radioName}`)
+                queue.textChannel?.send("🔄 Reconnecting to radio after deployment...")
+                setTimeout(() => playRadio(guild, queue.radioUrl, queue.radioName), 3000)
             } else if (queue.songs.length > 0) {
+                console.log(`🔄 Resuming music queue`)
+                queue.textChannel?.send("🔄 Resuming music after deployment...")
                 setTimeout(() => playSong(guild, queue.songs[0]), 2000)
             }
         } catch (err) {
             console.error(`Error resuming music for guild ${guildId}:`, err)
+            queue.textChannel?.send("❌ Gagal reconnect setelah deployment. Silakan coba manual.")
         }
     }
 }
@@ -502,10 +550,11 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
         }
     });
 
-    ff.on('close', (code) => {
-        console.log('[radio] ffmpeg closed with code', code);
-        if (onClose) onClose(code);
-        if (code !== 0 && code !== null && code !== 1) {
+    ff.on('close', (code, signal) => {
+        console.log('[radio] ffmpeg closed with code', code, 'signal:', signal);
+        if (onClose) onClose(code, signal);
+        // Don't treat signal 15 (SIGTERM) as an error - it's often normal termination
+        if (code !== 0 && code !== null && code !== 1 && signal !== 'SIGTERM' && signal !== 15) {
             console.error('[radio] ffmpeg exited with error code:', code);
         }
     });
@@ -656,8 +705,11 @@ async function playRadio(guild, radioUrl, radioName) {
     }
 
     const codec = await detectStreamCodec(radioUrl)
-    const ff = spawnRadioFfmpeg(radioUrl, codec, (code) => {
-        if (code !== 0 && code !== null && !queue.radioStopped && !queue.isReconnecting) {
+    const ff = spawnRadioFfmpeg(radioUrl, codec, (code, signal) => {
+        // Check if this is an actual error that requires reconnection
+        const isError = (code !== 0 && code !== null && code !== 1 && signal !== 'SIGTERM' && signal !== 15)
+
+        if (isError && !queue.radioStopped && !queue.isReconnecting) {
             console.log('[radio] ffmpeg closed unexpectedly, triggering reconnect...');
             queue.isReconnecting = true
             queue.radioReconnectAttempts++
@@ -688,6 +740,8 @@ async function playRadio(guild, radioUrl, radioName) {
                     queue.isReconnecting = false
                 }
             }, delay)
+        } else if (signal === 'SIGTERM' || signal === 15) {
+            console.log('[radio] ffmpeg terminated normally (SIGTERM), no reconnect needed');
         }
     })
     queue.radioFfmpeg = ff
