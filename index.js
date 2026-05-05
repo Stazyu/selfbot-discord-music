@@ -9,6 +9,7 @@ const path = require("path")
 const dotenv = require("dotenv")
 const { createReactionUI } = require("./reactionUI")
 const { startRadioMetadataDetection } = require("./radioMetadata")
+const { searchSong } = require("./yt")
 dotenv.config()
 
 // Use system ffmpeg on Linux, ffmpeg-static on Windows
@@ -764,13 +765,14 @@ client.on("messageCreate", async msg => {
                 msg.channel.send(`📥 Added **${songs.length}** songs from playlist`)
 
             } else {
-                const videoId = extractYouTubeVideoId(query)
-                const search = await yts({ videoId })
-                console.log(search)
+                const songData = await searchSong(query)
+                console.log(songData)
 
                 songs.push({
-                    title: search.title,
-                    url: query
+                    title: songData.title,
+                    url: songData.url,
+                    duration: songData.duration,
+                    durationFormatted: songData.durationFormatted
                 })
 
                 const addedMsg = await msg.channel.send(`📥 Added **${songs[0].title}**`)
@@ -783,11 +785,13 @@ client.on("messageCreate", async msg => {
 
         } else {
 
-            const search = await yts(query)
+            const songData = await searchSong(query)
 
             songs.push({
-                title: search.videos[0].title,
-                url: search.videos[0].url
+                title: songData.title,
+                url: songData.url,
+                duration: songData.duration,
+                durationFormatted: songData.durationFormatted
             })
 
             const addedMsg = await msg.channel.send(`📥 Added **${songs[0].title}**`)
