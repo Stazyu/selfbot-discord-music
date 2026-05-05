@@ -9,7 +9,7 @@ function startRadioMetadataDetection(radioUrl, queue) {
     let metadataInterval = null;
 
     function detectMetadata() {
-        if (queue.radioStopped) {
+        if (queue.radioStopped || !metadataInterval) {
             if (metadataInterval) {
                 clearInterval(metadataInterval);
                 metadataInterval = null;
@@ -76,6 +76,28 @@ function startRadioMetadataDetection(radioUrl, queue) {
 
         ff.on('error', (err) => {
             console.log('[radio] Metadata detection error:', err.message);
+            // Skip metadata detection on error
+            if (metadataInterval) {
+                clearInterval(metadataInterval);
+                metadataInterval = null;
+            }
+        });
+
+        ff.stderr.on('data', (data) => {
+            stderr += data.toString();
+            // Check for specific FFmpeg errors that indicate metadata detection should be skipped
+            if (stderr.includes('0kB other streams:0kB global headers:0kB muxing overhead: unknown') ||
+                stderr.includes('Invalid data found when processing input') ||
+                stderr.includes('Connection refused') ||
+                stderr.includes('404 Not Found')) {
+                console.log('[radio] Skipping metadata detection due to stream error');
+                ff.kill();
+                if (metadataInterval) {
+                    clearInterval(metadataInterval);
+                    metadataInterval = null;
+                }
+                return;
+            }
         });
 
         // Kill FFmpeg after 5 seconds if it doesn't finish
