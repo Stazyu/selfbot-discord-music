@@ -986,6 +986,48 @@ client.on("messageCreate", async msg => {
         }
     }
 
+    if (cmd === "sync") {
+        if (!queue) return msg.reply("❌ Tidak ada queue yang aktif. Gunakan command ?play atau ?radio terlebih dahulu.")
+
+        const voice = msg.member.voice.channel
+        if (!voice) return msg.reply("❌ Kamu harus berada di voice channel!")
+
+        try {
+            // Update voice channel ID dan text channel
+            queue.voiceChannelId = voice.id
+            queue.textChannel = msg.channel
+
+            // Join ke voice channel baru
+            if (queue.connection) {
+                queue.connection.destroy()
+            }
+
+            const connection = joinVoiceChannel({
+                channelId: voice.id,
+                guildId: msg.guild.id,
+                adapterCreator: msg.guild.voiceAdapterCreator
+            })
+
+            connection.subscribe(queue.player)
+            queue.connection = connection
+
+            msg.channel.send("✅ Channel ID berhasil di-sync dan bot sudah join ke voice channel!")
+
+            // Resume playback jika ada
+            if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
+                playRadio(msg.guild, queue.radioUrl, queue.radioName)
+            } else if (queue.songs && queue.songs.length > 0) {
+                playSong(msg.guild, queue.songs[0])
+            }
+
+            saveState()
+
+        } catch (err) {
+            console.error("Error syncing channel:", err)
+            msg.reply("❌ Gagal sync channel: " + err.message)
+        }
+    }
+
     if (cmd === "help") {
         const helpEmbed = `
 🎵 **Music Selfbot Commands** 🎵
@@ -993,11 +1035,12 @@ client.on("messageCreate", async msg => {
 **?play** <song name or URL> - Play a song from YouTube
 **?play** <playlist URL> [limit] - Play a YouTube playlist (optional limit)
 **?skip** - Skip the current song
-**?stop** - Stop playing and clear the queue
+**?stop** - Stop playing and clear queue
 **?volume** [0-100] - Set or check playback volume
 **?radio** <station name or URL> - Play a radio station
 **?clearchat** [number] - Delete messages in text channel (default 100, max 100)
 **?leave** - Leave voice channel and clear queue
+**?sync** - Sync channel ID dan auto-join ke voice channel saat ini
 **?state** - Show current bot state
 **?help** - Show this help message
 
