@@ -49,6 +49,11 @@ function startRadioMetadataDetection(radioUrl, queue) {
             }
 
             if (songTitle && songTitle !== currentSong) {
+                // Skip error messages from being added to play history
+                if (songTitle.includes('0kB other streams:0kB global headers:0kB muxing overhead: unknown')) {
+                    return;
+                }
+
                 currentSong = songTitle;
                 console.log(`[radio] Detected song: ${currentSong}`);
 

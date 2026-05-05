@@ -495,7 +495,11 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
     ff.on('spawn', () => console.log('[radio] ffmpeg spawned for', inputUrl));
 
     ff.stderr.on('data', (data) => {
-        console.error('[radio] ffmpeg stderr:', data.toString());
+        const stderrOutput = data.toString();
+        // Skip the muxing overhead error message that appears when adding to recently played
+        if (!stderrOutput.includes('0kB other streams:0kB global headers:0kB muxing overhead: unknown')) {
+            console.error('[radio] ffmpeg stderr:', stderrOutput);
+        }
     });
 
     ff.on('close', (code) => {
