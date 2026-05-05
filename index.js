@@ -672,7 +672,9 @@ async function playRadio(guild, radioUrl, radioName) {
             if (queue.reconnectMessage) {
                 queue.reconnectMessage.edit(reconnectText).catch(console.error)
             } else {
-                queue.reconnectMessage = queue.textChannel.send(reconnectText)
+                queue.textChannel.send(reconnectText).then(msg => {
+                    queue.reconnectMessage = msg
+                }).catch(console.error)
             }
 
             setTimeout(() => {
