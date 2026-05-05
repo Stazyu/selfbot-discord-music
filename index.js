@@ -244,6 +244,8 @@ async function resumeAllMusic() {
 
 client.on("voiceStateUpdate", (oldState, newState) => {
     if (!oldState.member) return
+
+    // Handle bot yang keluar dari voice channel
     if (oldState.member.id === client.user.id && oldState.channel && !newState.channel) {
         console.log("⚠️ Bot was kicked from voice channel")
         const queue = queues.get(oldState.guild.id)
@@ -275,14 +277,60 @@ client.on("voiceStateUpdate", (oldState, newState) => {
                             console.error("Error rejoining voice channel:", err)
                             queue.textChannel?.send("❌ Gagal rejoin ke VC")
                         }
+                    } else {
+                        // Voice channel tidak ada (temporary channel deleted)
+                        console.log("🔄 Voice channel tidak ditemukan, kemungkinan temporary channel dihapus")
+                        queue.textChannel?.send("🔄 Voice channel tidak ditemukan. State direset. Join ke voice baru untuk melanjutkan.")
+
+                        // Reset state untuk channel ID lama tapi pertahankan data lainnya
+                        queue.voiceChannelId = null
+                        queue.connection = null
+
+                        // Stop semua proses yang sedang berjalan
+                        if (queue.currentProcesses) {
+                            queue.currentProcesses.ytdlp.kill()
+                            queue.currentProcesses.ff.kill()
+                        }
+                        if (queue.radioFfmpeg) {
+                            queue.radioFfmpeg.kill()
+                        }
+                        if (queue.metadataDetector) {
+                            queue.metadataDetector.stop()
+                            queue.metadataDetector = null
+                        }
+
+                        // Reset player
+                        queue.player.stop()
+
+                        // Save state yang sudah direset
+                        saveState()
                     }
                 }
             }, 5000)
         }
     }
+
+    // Handle user yang join ke voice channel (untuk siap resume setelah temporary channel dihapus)
+    if (oldState.member.id !== client.user.id && !oldState.channel && newState.channel) {
+        const queue = queues.get(newState.guild.id)
+        if (queue && !queue.voiceChannelId && queue.connection === null) {
+            // User join ke voice baru dan bot sedang menunggu untuk resume
+            console.log("🔄 User join ke voice channel baru, bot siap untuk resume")
+
+            // Update state dengan channel baru tapi belum join
+            queue.voiceChannelId = newState.channel.id
+            queue.textChannel = newState.channel // Update text channel ke channel yang sama dengan voice
+
+            // Beritahu user bahwa bot siap dan menunggu command
+            queue.textChannel?.send("🔄 Bot siap untuk melanjutkan. Gunakan command ?play atau ?radio untuk memulai kembali.")
+
+            saveState()
+        }
+    }
 })
 
 function stream(url) {
+    // ...
 
     const ytdlp = spawn(ytdlpExecutable, [
         "-f", "bestaudio",
