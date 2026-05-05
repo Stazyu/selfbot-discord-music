@@ -905,6 +905,9 @@ client.on("messageCreate", async msg => {
                 }
 
                 queues.set(msg.guild.id, queue)
+            } else {
+                // Preserve existing volume and playHistory
+                console.log("📻 Preserving existing volume and playHistory for radio")
             }
 
             queue.songs = []

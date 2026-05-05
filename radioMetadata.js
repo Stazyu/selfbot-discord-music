@@ -57,7 +57,7 @@ function startRadioMetadataDetection(radioUrl, queue) {
                     queue.playHistory = []
                 }
                 queue.playHistory.unshift({
-                    title: songTitle,
+                    title: `${songTitle} (Radio)`,
                     url: queue.radioUrl,
                     playedAt: new Date().toISOString(),
                     isRadio: true
