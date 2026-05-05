@@ -1063,8 +1063,13 @@ client.on("messageCreate", async msg => {
                 const guild = client.guilds.cache.get(guildId)
                 const guildName = guild ? guild.name : "Unknown Guild"
                 stateMsg += `🏠 **Guild:** ${guildName} (${guildId})\n`
-                stateMsg += `   📢 **Voice Channel:** ${queue.voiceChannelId}\n`
-                stateMsg += `   💬 **Text Channel:** ${queue.textChannel?.id || "N/A"}\n`
+                // Get channel names
+                const voiceChannel = guild?.channels.cache.get(queue.voiceChannelId)
+                const voiceChannelName = voiceChannel ? voiceChannel.name : queue.voiceChannelId
+                const textChannelName = queue.textChannel?.name || queue.textChannel?.id || "N/A"
+
+                stateMsg += `   📢 **Voice Channel:** ${voiceChannelName} (${queue.voiceChannelId})\n`
+                stateMsg += `   💬 **Text Channel:** ${textChannelName} (${queue.textChannel?.id || "N/A"})\n`
                 stateMsg += `   🔊 **Volume:** ${Math.round((queue.volume ?? 1.0) * 100)}%\n`
 
                 // Show currently playing
