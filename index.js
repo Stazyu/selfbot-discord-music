@@ -711,12 +711,19 @@ async function playRadio(guild, radioUrl, radioName) {
         saveState()
     })
 
-    const radioMsg = await queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
-    queue.radioMessage = radioMsg
-    if (!queue.hasReactionUI) {
-        queue.reactionCollector = createReactionUI(radioMsg, queue)
-        queue.hasReactionUI = true
+    if (queue.radioMessage && queue.isReconnecting) {
+        // Edit existing radio message if reconnecting
+        queue.radioMessage.edit(`📻 Now playing radio: **${radioName}**`).catch(console.error)
+    } else {
+        // Send new radio message if first time or no existing message
+        const radioMsg = await queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
+        queue.radioMessage = radioMsg
+        if (!queue.hasReactionUI) {
+            queue.reactionCollector = createReactionUI(radioMsg, queue)
+            queue.hasReactionUI = true
+        }
     }
+
     if (queue.reconnectMessage) {
         queue.reconnectMessage.edit("✅ Berhasil reconnect radio").catch(console.error)
         queue.reconnectMessage = null
