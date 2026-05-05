@@ -627,6 +627,8 @@ async function playRadio(guild, radioUrl, radioName) {
         return
     }
 
+    radioUrl = await fetch(radioUrl).then(res => res.url)
+
     console.log("📻 Playing radio:", radioName)
 
     if (queue.radioFfmpeg) {
@@ -652,7 +654,7 @@ async function playRadio(guild, radioUrl, radioName) {
 
     const codec = await detectStreamCodec(radioUrl)
     const ff = spawnRadioFfmpeg(radioUrl, codec, (code) => {
-        if (code !== 0 && code !== null && !queue.radioStopped) {
+        if (code !== 0 && code !== null && !queue.radioStopped && !queue.isReconnecting) {
             console.log('[radio] ffmpeg closed unexpectedly, triggering reconnect...');
             queue.isReconnecting = true
             queue.radioReconnectAttempts++
