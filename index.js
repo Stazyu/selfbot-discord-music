@@ -643,7 +643,6 @@ async function playRadio(guild, radioUrl, radioName) {
         queue.radioReconnectAttempts = 0
         queue.reconnectMessage = null
     }
-    queue.isReconnecting = false
     const MAX_RECONNECT_ATTEMPTS = 5
 
     // Stop existing metadata detection if any
@@ -728,6 +727,9 @@ async function playRadio(guild, radioUrl, radioName) {
         queue.reconnectMessage.edit("✅ Berhasil reconnect radio").catch(console.error)
         queue.reconnectMessage = null
     }
+
+    // Reset reconnecting flag after successful reconnect
+    queue.isReconnecting = false
 
     // Start metadata detection for current song
     queue.metadataDetector = startRadioMetadataDetection(radioUrl, queue)
