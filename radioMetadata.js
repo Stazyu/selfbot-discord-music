@@ -109,7 +109,7 @@ function startRadioMetadataDetection(radioUrl, queue) {
     // Try to detect metadata immediately
     detectMetadata();
     // Then check every 10 seconds for updates
-    metadataInterval = setInterval(detectMetadata, 20000);
+    metadataInterval = setInterval(detectMetadata, 10000);
 
     return {
         stop: () => {

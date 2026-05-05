@@ -636,7 +636,10 @@ async function playRadio(guild, radioUrl, radioName) {
     queue.radioStopped = false
     queue.radioUrl = radioUrl
     queue.radioName = radioName
-    queue.radioReconnectAttempts = 0
+    // Only reset reconnect attempts if this is not a reconnection attempt
+    if (!queue.isReconnecting) {
+        queue.radioReconnectAttempts = 0
+    }
     queue.reconnectMessage = null
     queue.isReconnecting = false
     const MAX_RECONNECT_ATTEMPTS = 5
