@@ -250,6 +250,19 @@ client.on("voiceStateUpdate", (oldState, newState) => {
         console.log("⚠️ Bot was kicked from voice channel")
         const queue = queues.get(oldState.guild.id)
         if (queue) {
+            // Calculate playback time for resume functionality
+            if (queue.currentSong && !queue.currentSong.isRadio) {
+                const startedAt = new Date(queue.currentSong.startedAt)
+                const currentTime = new Date()
+                const elapsedSeconds = Math.floor((currentTime - startedAt) / 1000)
+
+                // Add resume time to the current song
+                if (queue.songs.length > 0) {
+                    queue.songs[0].resumeFrom = elapsedSeconds
+                    console.log(`💾 Saved resume time: ${elapsedSeconds} seconds for "${queue.currentSong.title}"`)
+                }
+            }
+
             queue.voiceChannelId = oldState.channel.id
             queue.textChannel?.send("⚠️ Bot terkick dari VC, mencoba rejoin dalam 5 detik...")
             setTimeout(() => {
@@ -329,14 +342,20 @@ client.on("voiceStateUpdate", (oldState, newState) => {
     }
 })
 
-function stream(url) {
-    // ...
-
-    const ytdlp = spawn(ytdlpExecutable, [
+function stream(url, seekTime = null) {
+    const ytdlpArgs = [
         "-f", "bestaudio",
-        "-o", "-",
-        url
-    ])
+        "-o", "-"
+    ]
+
+    // Add seek parameter if provided
+    if (seekTime) {
+        ytdlpArgs.push("-ss", seekTime.toString())
+    }
+
+    ytdlpArgs.push(url)
+
+    const ytdlp = spawn(ytdlpExecutable, ytdlpArgs)
 
     const ff = spawn(ffmpeg, [
         "-i", "pipe:0",
@@ -520,6 +539,14 @@ async function playSong(guild, song) {
 
     console.log("🎵 Playing:", song)
 
+    // Track playback start time for resume functionality
+    queue.currentSong = {
+        title: song.title,
+        url: song.url,
+        startedAt: new Date().toISOString(),
+        isRadio: false
+    }
+
     // Add to play history
     if (!queue.playHistory) {
         queue.playHistory = []
@@ -540,7 +567,15 @@ async function playSong(guild, song) {
         queue.currentProcesses.ff.kill()
     }
 
-    const audio = stream(song.url)
+    // Calculate seek time if resuming
+    let seekTime = null
+    if (song.resumeFrom) {
+        seekTime = song.resumeFrom
+        console.log(`🔄 Resuming from ${seekTime} seconds`)
+        delete song.resumeFrom // Clean up the resume flag
+    }
+
+    const audio = stream(song.url, seekTime)
 
     const resource = createAudioResource(audio, { inlineVolume: true })
     resource.volume.setVolume(queue.volume ?? 1.0)
