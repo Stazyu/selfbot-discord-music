@@ -1107,9 +1107,26 @@ client.on("messageCreate", async msg => {
                 stateMsg += `   💬 **Text Channel:** ${textChannelName} (${queue.textChannel?.id || "N/A"})\n`
                 stateMsg += `   🔊 **Volume:** ${Math.round((queue.volume ?? 1.0) * 100)}%\n`
 
-                // Show currently playing
+                // Show currently playing with duration and current time
                 if (queue.songs && queue.songs.length > 0 && !queue.radioStopped) {
-                    stateMsg += `   🎶 **Now Playing:** ${queue.songs[0].title}\n`
+                    const currentSong = queue.songs[0]
+                    let nowPlayingInfo = `🎶 **Now Playing:** ${currentSong.title}`
+
+                    // Add duration and current time if available
+                    if (currentSong.duration) {
+                        const currentTime = queue.currentSong && !queue.currentSong.isRadio ?
+                            Math.floor((new Date() - new Date(queue.currentSong.startedAt)) / 1000) : 0
+
+                        const formatTime = (seconds) => {
+                            const mins = Math.floor(seconds / 60)
+                            const secs = Math.floor(seconds % 60)
+                            return `${mins}:${secs.toString().padStart(2, '0')}`
+                        }
+
+                        nowPlayingInfo += ` (${formatTime(currentTime)}/${formatTime(currentSong.duration)})`
+                    }
+
+                    stateMsg += `   ${nowPlayingInfo}\n`
                 } else if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
                     stateMsg += `   📻 **Now Playing Radio:** ${queue.radioName}\n`
                 } else {
