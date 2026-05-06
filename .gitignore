@@ -55,3 +55,5 @@ yt-dlp
 yt-dlp.exe
 
 state.json
+test-metadata.js
+test-url.txt

@@ -107,7 +107,8 @@ function saveState() {
             radioStopped: queue.radioStopped,
             textChannelId: queue.textChannel?.id,
             playHistory: queue.playHistory || [],
-            loopMode: queue.loopMode || 0
+            loopMode: queue.loopMode || 0,
+            playing: queue.playing || false
         }
     }
     try {
@@ -172,7 +173,8 @@ client.on("ready", async () => {
                     volume: guildState.volume ?? 1.0,
                     playHistory: guildState.playHistory || [],
                     loopMode: guildState.loopMode || 0,
-                    isSkipping: false
+                    isSkipping: false,
+                    playing: guildState.playing || false
                 }
                 queues.set(guildId, queue)
 
@@ -584,6 +586,9 @@ async function playSong(guild, song) {
     const queue = queues.get(guild.id)
 
     if (!song) {
+        // Reset playing state when no more songs
+        queue.playing = false
+
         if (queue.currentProcesses) {
             queue.currentProcesses.ytdlp.kill()
             queue.currentProcesses.ff.kill()
@@ -608,6 +613,9 @@ async function playSong(guild, song) {
     }
 
     console.log("🎵 Playing:", song)
+
+    // Set playing state
+    queue.playing = true
 
     // Track playback start time for resume functionality
     queue.currentSong = {
@@ -683,6 +691,9 @@ async function playSong(guild, song) {
             queue.currentProcesses.ytdlp.kill()
             queue.currentProcesses.ff.kill()
         }
+
+        // Reset playing state temporarily before next song
+        queue.playing = false
 
         if (queue.isSkipping || (queue.loopMode || 0) === 0) {
             queue.songs.shift()
@@ -964,6 +975,7 @@ client.on("messageCreate", async msg => {
                 playHistory: [],
                 loopMode: 0,
                 isSkipping: false,
+                playing: false,
                 radioUrl: null,
                 radioName: null,
                 radioStopped: true

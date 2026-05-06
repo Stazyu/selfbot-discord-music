@@ -32,7 +32,9 @@ function startRadioMetadataDetection(radioUrl, queue) {
             '-probesize', '50000000',
             '-i', radioUrl,
             '-f', 'null',
-            '-'
+            '-',
+            '-metadata', 'title=',
+            '-metadata', 'artist='
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
         let stderr = '';
@@ -45,19 +47,42 @@ function startRadioMetadataDetection(radioUrl, queue) {
         ff.on('close', (code) => {
             if (queue.radioStopped || isKilled) return;
 
-            // Try to extract song title from FFmpeg output
+            // Try to extract song title from FFmpeg output with multiple patterns
+            const metadataMatch = stderr.match(/StreamTitle='([^']+)'/i);
             const titleMatch = stderr.match(/title\s*:\s*(.+)/i);
             const artistMatch = stderr.match(/artist\s*:\s*(.+)/i);
-            const metadataMatch = stderr.match(/StreamTitle='([^']+)'/i);
+            const icyMatch = stderr.match(/icy-name\s*:\s*(.+)/i);
+            const titleArtistMatch = stderr.match(/(.+?)\s*-\s*(.+)/i);
 
             let songTitle = null;
 
+            // Try different metadata extraction patterns
             if (metadataMatch) {
                 songTitle = metadataMatch[1];
+                console.log(`[radio] Metadata found via StreamTitle: ${songTitle}`);
             } else if (titleMatch && artistMatch) {
                 songTitle = `${artistMatch[1]} - ${titleMatch[1]}`;
+                console.log(`[radio] Metadata found via title/artist: ${songTitle}`);
             } else if (titleMatch) {
                 songTitle = titleMatch[1];
+                console.log(`[radio] Metadata found via title only: ${songTitle}`);
+            } else if (icyMatch) {
+                // Check if icy-name contains song info or just station name
+                const icyName = icyMatch[1];
+                // Skip if it looks like a station name (contains "FM", "Radio", etc.)
+                if (icyName.match(/FM|RADIO|STATION/i)) {
+                    console.log(`[radio] Skipping station name from icy-name: ${icyName}`);
+                } else {
+                    songTitle = icyName;
+                    console.log(`[radio] Metadata found via icy-name: ${songTitle}`);
+                }
+            } else if (titleArtistMatch) {
+                songTitle = titleArtistMatch[0];
+                console.log(`[radio] Metadata found via title-artist pattern: ${songTitle}`);
+            } else {
+                console.log(`[radio] No metadata patterns matched in stderr output`);
+                // Log a sample of stderr for debugging (first 500 chars)
+                console.log(`[radio] stderr sample: ${stderr.substring(0, 500)}...`);
             }
 
             if (songTitle && songTitle !== currentSong) {
@@ -88,7 +113,16 @@ function startRadioMetadataDetection(radioUrl, queue) {
 
                 // Update the radio message with current song info
                 if (queue.radioMessage) {
-                    queue.radioMessage.edit(`📻 Now playing radio: **${queue.radioName}**\n🎵 Now playing: **${currentSong}**`).catch(console.error);
+                    console.log(`[radio] Updating message with current song: ${currentSong}`);
+                    queue.radioMessage.edit(`📻 Now playing radio: **${queue.radioName}**\n🎵 Now playing: **${currentSong}**`)
+                        .then(() => {
+                            console.log(`[radio] Successfully updated radio message`);
+                        })
+                        .catch(err => {
+                            console.error(`[radio] Failed to update radio message:`, err);
+                        });
+                } else {
+                    console.log(`[radio] No radio message available to update`);
                 }
             } else {
                 // No metadata detected, but process closed normally
@@ -120,11 +154,11 @@ function startRadioMetadataDetection(radioUrl, queue) {
             }
         });
 
-        // Kill FFmpeg after 5 seconds if it doesn't finish
+        // Kill FFmpeg after 15 seconds if it doesn't finish (radio streams need more time)
         const killTimeout = setTimeout(() => {
             isKilled = true;
             ff.kill('SIGKILL'); // Force kill
-        }, 5000);
+        }, 15000);
 
         // Clean up timeout when process closes
         ff.on('close', () => {
@@ -134,8 +168,8 @@ function startRadioMetadataDetection(radioUrl, queue) {
 
     // Try to detect metadata immediately
     detectMetadata();
-    // Then check every 10 seconds for updates
-    metadataInterval = setInterval(detectMetadata, 10000);
+    // Then check every 5 seconds for updates (more frequent for better detection)
+    metadataInterval = setInterval(detectMetadata, 5000);
 
     return {
         stop: () => {
