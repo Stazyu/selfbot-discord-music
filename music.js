@@ -65,6 +65,22 @@ client.on("messageCreate", async msg => {
         queue?.stop()
     }
 
+    if (cmd === "loop") {
+        if (!queue) return msg.channel.send("Queue kosong")
+
+        queue.loopMode = (queue.loopMode + 1) % 3
+        const modes = ["Off ❌", "Single 🔂", "All 🔁"]
+        msg.channel.send(`🔂 Loop mode set to: **${modes[queue.loopMode]}**`)
+    }
+
+    if (cmd === "shuffle") {
+        if (!queue || queue.songs.length < 3) 
+            return msg.channel.send("Butuh minimal 2 lagu di antrean untuk shuffle")
+        
+        queue.shuffle()
+        msg.channel.send("🔀 Queue berhasil di-shuffle!")
+    }
+
     if (cmd === "queue") {
 
         if (!queue || !queue.songs.length)
@@ -74,7 +90,10 @@ client.on("messageCreate", async msg => {
             .map((s, i) => `${i + 1}. ${s.title}`)
             .join("\n")
 
-        msg.channel.send(`📜 Queue\n${list}`)
+        const modes = ["Off ❌", "Single 🔂", "All 🔁"]
+        const loopStatus = modes[queue.loopMode]
+
+        msg.channel.send(`📜 Queue | Loop: **${loopStatus}**\n${list}`)
     }
 
     if (cmd === "np") {

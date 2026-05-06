@@ -21,6 +21,8 @@ function createPlayer(msg, voice) {
         player,
         songs: [],
         playing: false,
+        loopMode: 0, // 0: Off, 1: Single, 2: All
+        isSkipping: false,
 
         async play() {
 
@@ -40,7 +42,14 @@ function createPlayer(msg, voice) {
 
             this.player.once(AudioPlayerStatus.Idle, () => {
 
-                this.songs.shift()
+                if (this.isSkipping || this.loopMode === 0) {
+                    this.songs.shift()
+                    this.isSkipping = false
+                } else if (this.loopMode === 2) {
+                    const shiftedSong = this.songs.shift()
+                    this.songs.push(shiftedSong)
+                }
+                // loopMode === 1: keep the current song at index 0
 
                 if (this.songs.length)
                     this.play()
@@ -51,6 +60,7 @@ function createPlayer(msg, voice) {
         },
 
         skip() {
+            this.isSkipping = true
             this.player.stop()
         },
 
@@ -69,6 +79,22 @@ function createPlayer(msg, voice) {
             this.connection.destroy()
 
             this.playing = false
+        },
+
+        shuffle() {
+            if (this.songs.length < 3) return; // Need at least 2 songs in queue (plus 1 playing)
+            
+            // Extract all songs except the first one (currently playing)
+            const playing = this.songs.shift();
+            
+            // Fisher-Yates shuffle
+            for (let i = this.songs.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [this.songs[i], this.songs[j]] = [this.songs[j], this.songs[i]];
+            }
+            
+            // Put the playing song back to front
+            this.songs.unshift(playing);
         }
 
     }
