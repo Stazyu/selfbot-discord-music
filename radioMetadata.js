@@ -191,7 +191,7 @@ function startRadioMetadataDetection(radioUrl, queue) {
                     if (!queue.radioStopped) {
                         consecutiveErrors = 0; // Reset error counter
                         lastSuccessfulDetection = Date.now(); // Reset timestamp
-                        metadataInterval = setInterval(detectMetadata, 5000);
+                        metadataInterval = setInterval(detectMetadata, 10000);
                         console.log('[radio] Metadata detection restarted');
                     }
                 }, ERROR_RESTART_DELAY);
@@ -214,8 +214,8 @@ function startRadioMetadataDetection(radioUrl, queue) {
     console.log('[radio] Starting initial metadata detection (fast mode)');
     detectMetadata(true);
     // Then check every 5 seconds for updates (slower but more thorough)
-    console.log('[radio] Setting up metadata detection interval: 5000ms');
-    metadataInterval = setInterval(() => detectMetadata(false), 5000);
+    console.log('[radio] Setting up metadata detection interval: 20000ms');
+    metadataInterval = setInterval(() => detectMetadata(false), 20000);
     console.log('[radio] Metadata detection interval started');
 
     return {
