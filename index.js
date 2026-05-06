@@ -7,7 +7,7 @@ const https = require("https")
 const fs = require("fs")
 const path = require("path")
 const dotenv = require("dotenv")
-const { createReactionUI, createCommandPanel, setPlaySongFunction } = require("./reactionUI")
+const { createReactionUI, createCommandPanel, setPlaySongFunction, removeAllReactionsFromChannel } = require("./reactionUI")
 const { startRadioMetadataDetection } = require("./radioMetadata")
 const { searchSong } = require("./yt")
 dotenv.config()
@@ -1103,6 +1103,17 @@ client.on("messageCreate", async msg => {
         } catch (err) {
             console.error("Error deleting messages:", err)
             msg.channel.send("❌ Gagal menghapus pesan: " + err.message)
+        }
+    }
+
+    if (cmd === "clearreactions") {
+        try {
+            msg.channel.send("🧹 Menghapus semua reaction dari channel...")
+            await removeAllReactionsFromChannel(msg.channel)
+            msg.channel.send("✅ Semua reaction berhasil dihapus")
+        } catch (err) {
+            console.error("Error clearing reactions:", err)
+            msg.channel.send("❌ Gagal menghapus reaction: " + err.message)
         }
     }
 

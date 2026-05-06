@@ -199,6 +199,7 @@ async function createCommandPanel(message, queue) {
 ?leave - Leave VC
 ?volume <0-100> - Set volume
 ?clearchat <amount> - Clear messages
+?clearreactions - Remove all reactions from channel
 ?sync - Sync state
 ?panel - Show this panel`
 
