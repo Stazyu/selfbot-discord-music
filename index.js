@@ -69,12 +69,14 @@ async function getPlaylistVideos(url) {
 
             try {
                 const data = JSON.parse(output)
-                const videos = data.entries.map(video => ({
-                    title: video.title,
-                    url: `https://www.youtube.com/watch?v=${video.id}`,
-                    duration: video.duration,
-                    durationFormatted: formatDuration(video.duration)
-                }))
+                const videos = data.entries
+                    .filter(video => video && video.title && video.id)
+                    .map(video => ({
+                        title: video.title,
+                        url: `https://www.youtube.com/watch?v=${video.id}`,
+                        duration: video.duration,
+                        durationFormatted: formatDuration(video.duration)
+                    }))
 
                 resolve(videos)
             } catch (err) {
@@ -1056,7 +1058,11 @@ client.on("messageCreate", async msg => {
 
         let queueMsg = `📜 **Queue | Loop: ${loopStatus}**\n\n`
         queue.songs.slice(0, 10).forEach((song, i) => {
-            queueMsg += `${i + 1}. ${song.title || "Unknown"}\n`
+            if (song && song.title) {
+                queueMsg += `${i + 1}. ${song.title}\n`
+            } else {
+                queueMsg += `${i + 1}. Unknown Song (Invalid data)\n`
+            }
         })
 
         if (queue.songs.length > 10) {

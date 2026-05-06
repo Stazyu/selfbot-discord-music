@@ -23,6 +23,11 @@ async function searchSong(query) {
         const res = await yts({ videoId: YouTubeVideoId(query) })
         const video = res
         console.log("Video : ", video)
+
+        if (!video || !video.title) {
+            throw new Error("Video not found or invalid")
+        }
+
         return {
             title: video.title,
             url: video.url,
@@ -33,6 +38,10 @@ async function searchSong(query) {
     const res = await yts(query)
 
     const video = res.videos[0]
+
+    if (!video || !video.title) {
+        throw new Error("No videos found for the search query")
+    }
 
     return {
         title: video.title,
