@@ -916,7 +916,7 @@ client.on("messageCreate", async msg => {
                 } catch (error) {
                     console.error("Error fetching single URL:", error)
                     msg.channel.send(`❌ Failed to fetch video from URL: ${url}`)
-                    return
+                    return saveState()
                 }
             }
         } else {
@@ -933,8 +933,13 @@ client.on("messageCreate", async msg => {
             } catch (error) {
                 console.error("Error searching for song:", error)
                 msg.channel.send(`❌ No results found for: ${query}`)
-                return
+                return saveState()
             }
+        }
+
+        // Early return if no songs were successfully added
+        if (songs.length === 0) {
+            return saveState()
         }
 
         if (!queue) {
@@ -958,7 +963,10 @@ client.on("messageCreate", async msg => {
                 volume: 1.0,
                 playHistory: [],
                 loopMode: 0,
-                isSkipping: false
+                isSkipping: false,
+                radioUrl: null,
+                radioName: null,
+                radioStopped: true
             }
 
             queues.set(msg.guild.id, queue)
@@ -974,7 +982,9 @@ client.on("messageCreate", async msg => {
         queue.isReconnecting = false
 
         queue.songs.push(...songs)
+        console.log(`🎵 Adding ${songs.length} songs to queue. Total songs: ${queue.songs.length}`)
         saveState()
+        console.log(`💾 State saved. Queue songs count: ${queue.songs.length}`)
 
         if (queue.songs.length === songs.length) {
             playSong(msg.guild, queue.songs[0])
