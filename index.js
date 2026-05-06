@@ -7,7 +7,7 @@ const https = require("https")
 const fs = require("fs")
 const path = require("path")
 const dotenv = require("dotenv")
-const { createReactionUI, createCommandPanel } = require("./reactionUI")
+const { createReactionUI, createCommandPanel, setPlaySongFunction } = require("./reactionUI")
 const { startRadioMetadataDetection } = require("./radioMetadata")
 const { searchSong } = require("./yt")
 dotenv.config()
@@ -135,6 +135,10 @@ function loadState() {
 
 client.on("ready", async () => {
     console.log("✅ Logged in as", client.user.tag)
+    
+    // Set functions for reactionUI
+    setPlaySongFunction(playSong)
+    setPlayRadioFunction(playRadio)
     const state = loadState()
     if (state) {
         for (const [guildId, guildState] of Object.entries(state)) {

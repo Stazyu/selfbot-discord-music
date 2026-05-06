@@ -112,8 +112,15 @@ async function createReactionUI(message, queue) {
     return collector
 }
 
+// Import playSong function from index.js
+let playSong
+
+function setPlaySongFunction(fn) {
+    playSong = fn
+}
+
 async function createCommandPanel(message, queue) {
-    const controls = ["⏮", "▶️", "⏭", "🔊", "⏹", "📻", "🗑️", "ℹ️"]
+    const controls = ["⏮", "▶️", "⏭", "🔉", "🔊", "⏹", "📻", "🎵", "️🗑️", "ℹ️"]
 
     console.log("Creating command panel for message:", message.id)
 
@@ -128,9 +135,12 @@ async function createCommandPanel(message, queue) {
 ⏮ - Previous song (if in queue)
 ▶️ - Play/Pause
 ⏭ - Skip current song
+🔉 - Volume Down
 🔊 - Volume Up
 ⏹ - Stop & Clear Queue
-📻 - Radio Mode
+📻 - Radio Info
+🎵 - Music Mode
+📻▶️ - Back to Radio
 🗑️ - Clear Chat
 ℹ️ - Show Queue Info
 
@@ -202,6 +212,15 @@ async function createCommandPanel(message, queue) {
                 queue.textChannel.send("⏭️ Skipped")
                 break
 
+            case "🔉":
+                // Volume down
+                queue.volume = Math.max(0, (queue.volume ?? 1.0) - 0.2)
+                if (queue.player.state.status === "playing" && queue.player.state.resource?.volume) {
+                    queue.player.state.resource.volume.setVolume(queue.volume)
+                }
+                queue.textChannel.send(`🔉 Volume: **${Math.round(queue.volume * 100)}%**`)
+                break
+
             case "🔊":
                 // Volume up
                 queue.volume = Math.min(5, (queue.volume ?? 1.0) + 0.2)
@@ -232,6 +251,36 @@ async function createCommandPanel(message, queue) {
                     queue.textChannel.send(`📻 Radio: **${queue.radioName}**`)
                 } else {
                     queue.textChannel.send("ℹ️ No radio playing. Use ?radio <station> to start")
+                }
+                break
+
+            case "🎵":
+                // Music Mode - switch from radio to music if queue has songs
+                if (queue.songs.length > 0) {
+                    if (queue.radioFfmpeg) {
+                        queue.radioFfmpeg.kill()
+                        queue.radioFfmpeg = null
+                    }
+                    queue.radioStopped = true
+                    queue.textChannel.send("🎵 Switching to Music Mode")
+                    playSong(queue.textChannel.guild, queue.songs[0])
+                } else {
+                    queue.textChannel.send("ℹ️ No songs in queue. Use ?play to add songs first")
+                }
+                break
+
+            case "📻":
+                // Back to Radio - switch from music to radio if radio URL exists
+                if (queue.radioUrl && queue.radioName) {
+                    if (queue.currentProcesses) {
+                        queue.currentProcesses.ytdlp.kill()
+                        queue.currentProcesses.ff.kill()
+                    }
+                    queue.radioStopped = false
+                    queue.textChannel.send("📻▶️ Switching back to Radio Mode")
+                    playRadio(queue.textChannel.guild, queue.radioUrl, queue.radioName)
+                } else {
+                    queue.textChannel.send("ℹ️ No radio station available. Use ?radio to set a station first")
                 }
                 break
 
@@ -285,4 +334,4 @@ async function createCommandPanel(message, queue) {
     return collector
 }
 
-module.exports = { createReactionUI, removeReactionUI, createCommandPanel }
+module.exports = { createReactionUI, removeReactionUI, createCommandPanel, setPlaySongFunction }
