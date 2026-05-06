@@ -850,7 +850,15 @@ async function playRadio(guild, radioUrl, radioName) {
         const isError = (code !== 0 && code !== null && code !== 1 && signal !== 'SIGTERM' && signal !== 15)
 
         if (isError && !queue.radioStopped && !queue.isReconnecting) {
-            console.log('[radio] ffmpeg closed unexpectedly, triggering reconnect...');
+            console.log('[radio] ffmpeg closed unexpectedly, stopping metadata and triggering reconnect...');
+
+            // Stop metadata detector when radio crashes
+            if (queue.metadataDetector) {
+                queue.metadataDetector.stop()
+                queue.metadataDetector = null
+                console.log('[radio] Metadata detector stopped due to radio crash');
+            }
+
             queue.isReconnecting = true
             queue.radioReconnectAttempts++
 
@@ -861,25 +869,17 @@ async function playRadio(guild, radioUrl, radioName) {
                 return
             }
 
-            const delay = Math.min(5000 * Math.pow(2, queue.radioReconnectAttempts - 1), 30000)
-            const reconnectText = `❌ Radio stream terputus, mencoba reconnect (${queue.radioReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) dalam ${delay / 1000} detik...`
-
-            if (queue.reconnectMessage) {
-                queue.reconnectMessage.edit(reconnectText).catch(console.error)
-            } else {
-                queue.textChannel.send(reconnectText).then(msg => {
-                    queue.reconnectMessage = msg
-                }).catch(console.error)
-            }
+            queue.textChannel.send(`🔄 Radio stream terputus, mencoba reconnect (${queue.radioReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`)
 
             setTimeout(() => {
                 const currentQueue = queues.get(guild.id)
                 if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
+                    // Metadata detector will be restarted automatically when playRadio is called
                     playRadio(guild, radioUrl, radioName)
                 } else {
                     queue.isReconnecting = false
                 }
-            }, delay)
+            }, 3000)
         } else if (signal === 'SIGTERM' || signal === 15) {
             console.log('[radio] ffmpeg terminated normally (SIGTERM), no reconnect needed');
         }
