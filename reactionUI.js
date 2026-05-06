@@ -2,6 +2,7 @@ async function removeAllReactionsFromChannel(channel) {
     try {
         let lastId = null
         let hasMore = true
+        const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
 
         while (hasMore) {
             const options = { limit: 100 }
@@ -17,12 +18,20 @@ async function removeAllReactionsFromChannel(channel) {
             }
 
             for (const [id, msg] of messages) {
-                if (msg.reactions.cache.size > 0) {
+                // Only remove reactions from messages created by the bot and not older than 14 days
+                if (msg.reactions.cache.size > 0 &&
+                    msg.author.bot &&
+                    msg.createdTimestamp > twoWeeksAgo) {
                     try {
                         await msg.reactions.removeAll()
                         console.log("Removed reactions from message:", id)
                     } catch (err) {
-                        console.error("Error removing reactions from message:", id, err)
+                        // Silently ignore permission errors for messages we can't modify
+                        if (err.code === 50013) {
+                            console.log("Skipping message due to permissions:", id)
+                        } else {
+                            console.error("Error removing reactions from message:", id, err)
+                        }
                     }
                 }
             }
