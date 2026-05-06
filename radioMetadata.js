@@ -70,8 +70,19 @@ function startRadioMetadataDetection(radioUrl, queue) {
                 // Check if icy-name contains song info or just station name
                 const icyName = icyMatch[1];
                 // Skip if it looks like a station name (contains radio station keywords)
-                if (icyName.match(/FM|RADIO|STATION|iRadio|PRAMBORS|RRI|ELSHINTA|TRAX|GEN|ARDAN|SMART|PAS|MARA|SWARA|MUSIC|HITS|CHANNEL|NETWORK/i)) {
-                    console.log(`[radio] Skipping station name from icy-name: ${icyName}`);
+                // But allow if it contains song-like patterns (artist - title format)
+                if (icyName.match(/FM|RADIO|STATION/i)) {
+                    // Check if it might be a song with station-like words
+                    if (icyName.match(/ - | – | ft\.|feat\./i)) {
+                        // Likely a song title with station-like words
+                        songTitle = icyName;
+                        console.log(`[radio] Metadata found via icy-name (song with station words): ${songTitle}`);
+                    } else {
+                        console.log(`[radio] Skipping station name from icy-name: ${icyName}`);
+                    }
+                } else if (icyName.match(/PRAMBORS|RRI|ELSHINTA|TRAX|GEN|ARDAN|SMART|PAS|MARA/i)) {
+                    // Skip specific Indonesian station names
+                    console.log(`[radio] Skipping Indonesian station name from icy-name: ${icyName}`);
                 } else if (icyName.length < 3) {
                     // Skip if too short (likely not a song title)
                     console.log(`[radio] Skipping too short title from icy-name: ${icyName}`);
