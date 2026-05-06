@@ -841,54 +841,100 @@ client.on("messageCreate", async msg => {
 
     if (cmd === "play") {
 
+        if (!query) {
+            return msg.reply("Usage: ?play <song name, URL, or multiple URLs separated by space>")
+        }
+
         let songs = []
         let limit = null
 
-        if (query.startsWith("http")) {
+        // Check if query contains multiple URLs (space-separated)
+        const urls = query.split(' ').filter(part => part.startsWith('http'))
 
-            if (query.includes("list=")) {
+        if (urls.length > 1) {
+            // Multiple URLs playback
+            msg.channel.send(`📥 Processing ${urls.length} URLs...`)
 
-                const parts = query.split(" ")
-                const url = parts[0]
-                limit = parts[1] ? parseInt(parts[1]) : null
+            for (const url of urls) {
+                try {
+                    if (url.includes("list=")) {
+                        // This is a playlist URL
+                        msg.channel.send(`📥 Fetching playlist from: ${url}`)
+                        const playlistSongs = await getPlaylistVideos(url)
 
+                        if (limit && limit > 0) {
+                            songs.push(...playlistSongs.slice(0, limit))
+                        } else {
+                            songs.push(...playlistSongs)
+                        }
+                    } else {
+                        // Single video URL
+                        const songData = await searchSong(url)
+                        songs.push({
+                            title: songData.title,
+                            url: songData.url,
+                            duration: songData.duration,
+                            durationFormatted: songData.durationFormatted
+                        })
+                    }
+                } catch (error) {
+                    console.error(`Error processing URL ${url}:`, error)
+                    msg.channel.send(`❌ Failed to process URL: ${url}`)
+                }
+            }
+
+            msg.channel.send(`📥 Added **${songs.length}** songs from multiple URLs`)
+
+        } else if (query.startsWith("http")) {
+            // Single URL or playlist
+            const parts = query.split(" ")
+            const url = parts[0]
+            limit = parts[1] ? parseInt(parts[1]) : null
+
+            if (url.includes("list=")) {
+                // Playlist URL
                 msg.channel.send("📥 Fetching playlist...")
                 songs = await getPlaylistVideos(url)
 
                 if (limit && limit > 0) {
                     songs = songs.slice(0, limit)
+                    msg.channel.send(`📥 Added **${songs.length}** songs from playlist (limited to ${limit})`)
+                } else {
+                    msg.channel.send(`📥 Added **${songs.length}** songs from playlist`)
                 }
-
-                msg.channel.send(`📥 Added **${songs.length}** songs from playlist`)
-
             } else {
+                // Single video URL
+                try {
+                    const songData = await searchSong(url)
+                    songs.push({
+                        title: songData.title,
+                        url: songData.url,
+                        duration: songData.duration,
+                        durationFormatted: songData.durationFormatted
+                    })
+                    msg.channel.send(`📥 Added **${songs[0].title}**`)
+                } catch (error) {
+                    console.error("Error fetching single URL:", error)
+                    msg.channel.send(`❌ Failed to fetch video from URL: ${url}`)
+                    return
+                }
+            }
+        } else {
+            // Search query (song name)
+            try {
                 const songData = await searchSong(query)
-                console.log(songData)
-
                 songs.push({
                     title: songData.title,
                     url: songData.url,
                     duration: songData.duration,
                     durationFormatted: songData.durationFormatted
                 })
-
-                const addedMsg = await msg.channel.send(`📥 Added **${songs[0].title}**`)
-
+                msg.channel.send(`📥 Added **${songs[0].title}**`)
+            } catch (error) {
+                console.error("Error searching for song:", error)
+                msg.channel.send(`❌ No results found for: ${query}`)
+                return
             }
-
-        } else {
-
-            const songData = await searchSong(query)
-
-            songs.push({
-                title: songData.title,
-                url: songData.url,
-                duration: songData.duration,
-                durationFormatted: songData.durationFormatted
-            })
-
-            const addedMsg = await msg.channel.send(`📥 Added **${songs[0].title}**`)
-
         }
 
         if (!queue) {
@@ -1223,8 +1269,10 @@ client.on("messageCreate", async msg => {
         const helpEmbed = `
 🎵 **Music Selfbot Commands** 🎵
 
-**?play** <song name or URL> - Play a song from YouTube
+**?play** <song name> - Search and play a song
+**?play** <single URL> - Play a single YouTube video
 **?play** <playlist URL> [limit] - Play a YouTube playlist (optional limit)
+**?play** <URL1 URL2 URL3...> - Play multiple URLs (space-separated)
 **?skip** - Skip the current song
 **?loop** - Toggle loop mode (Off/Single/All)
 **?shuffle** - Shuffle the current queue
