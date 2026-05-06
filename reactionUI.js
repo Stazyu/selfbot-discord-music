@@ -120,7 +120,7 @@ function setPlaySongFunction(fn) {
 }
 
 async function createCommandPanel(message, queue) {
-    const controls = ["⏮", "▶️", "⏭", "🔉", "🔊", "⏹", "📻", "🎵", "️🗑️", "ℹ️"]
+    const controls = ["⏮", "⏯️", "⏭", "🔉", "🔊", "⏹", "📻", "🎵", "️🗑️", "ℹ️"]
 
     console.log("Creating command panel for message:", message.id)
 
@@ -133,7 +133,7 @@ async function createCommandPanel(message, queue) {
 
 **Controls:**
 ⏮ - Previous song (if in queue)
-▶️ - Play/Pause
+⏯️ - Play/Pause
 ⏭ - Skip current song
 🔉 - Volume Down
 🔊 - Volume Up
@@ -190,7 +190,7 @@ async function createCommandPanel(message, queue) {
                 }
                 break
 
-            case "▶️":
+            case "⏯️":
                 // Play/Pause
                 if (queue.player.state.status === "paused") {
                     queue.player.unpause()
