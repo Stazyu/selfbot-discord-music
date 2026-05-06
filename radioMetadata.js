@@ -7,6 +7,10 @@ const ffmpeg = process.platform === "win32" ? require("ffmpeg-static") : "ffmpeg
 function startRadioMetadataDetection(radioUrl, queue) {
     let currentSong = null;
     let metadataInterval = null;
+    let lastSuccessfulDetection = Date.now();
+    let consecutiveErrors = 0;
+    const MAX_CONSECUTIVE_ERRORS = 3;
+    const ERROR_RESTART_DELAY = 30000; // 30 seconds
 
     function detectMetadata() {
         if (queue.radioStopped || !metadataInterval) {
@@ -15,6 +19,12 @@ function startRadioMetadataDetection(radioUrl, queue) {
                 metadataInterval = null;
             }
             return;
+        }
+
+        // Check if metadata detection has been stuck for too long (no successful detection for 5 minutes)
+        if (Date.now() - lastSuccessfulDetection > 300000) {
+            console.log('[radio] Metadata detection appears stuck, restarting...');
+            consecutiveErrors = MAX_CONSECUTIVE_ERRORS; // Force restart
         }
 
         const ff = spawn(ffmpeg, [
@@ -26,12 +36,14 @@ function startRadioMetadataDetection(radioUrl, queue) {
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
         let stderr = '';
+        let isKilled = false;
+
         ff.stderr.on('data', (data) => {
             stderr += data.toString();
         });
 
-        ff.on('close', () => {
-            if (queue.radioStopped) return;
+        ff.on('close', (code) => {
+            if (queue.radioStopped || isKilled) return;
 
             // Try to extract song title from FFmpeg output
             const titleMatch = stderr.match(/title\s*:\s*(.+)/i);
@@ -55,6 +67,8 @@ function startRadioMetadataDetection(radioUrl, queue) {
                 }
 
                 currentSong = songTitle;
+                lastSuccessfulDetection = Date.now();
+                consecutiveErrors = 0; // Reset error counter on success
                 console.log(`[radio] Detected song: ${currentSong}`);
 
                 // Add to play history
@@ -76,39 +90,46 @@ function startRadioMetadataDetection(radioUrl, queue) {
                 if (queue.radioMessage) {
                     queue.radioMessage.edit(`📻 Now playing radio: **${queue.radioName}**\n🎵 Now playing: **${currentSong}**`).catch(console.error);
                 }
+            } else {
+                // No metadata detected, but process closed normally
+                console.log('[radio] No metadata detected in this cycle');
             }
         });
 
         ff.on('error', (err) => {
             console.log('[radio] Metadata detection error:', err.message);
-            // Skip metadata detection on error
-            if (metadataInterval) {
-                clearInterval(metadataInterval);
-                metadataInterval = null;
-            }
-        });
+            consecutiveErrors++;
 
-        ff.stderr.on('data', (data) => {
-            stderr += data.toString();
-            // Check for specific FFmpeg errors that indicate metadata detection should be skipped
-            if (stderr.includes('0kB other streams:0kB global headers:0kB muxing overhead: unknown') ||
-                stderr.includes('Invalid data found when processing input') ||
-                stderr.includes('Connection refused') ||
-                stderr.includes('404 Not Found')) {
-                console.log('[radio] Skipping metadata detection due to stream error');
-                ff.kill();
+            // If too many consecutive errors, restart the metadata detection
+            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                console.log(`[radio] Too many consecutive errors (${consecutiveErrors}), restarting metadata detection in ${ERROR_RESTART_DELAY / 1000} seconds...`);
+
                 if (metadataInterval) {
                     clearInterval(metadataInterval);
                     metadataInterval = null;
                 }
-                return;
+
+                setTimeout(() => {
+                    if (!queue.radioStopped) {
+                        consecutiveErrors = 0; // Reset error counter
+                        lastSuccessfulDetection = Date.now(); // Reset timestamp
+                        metadataInterval = setInterval(detectMetadata, 10000);
+                        console.log('[radio] Metadata detection restarted');
+                    }
+                }, ERROR_RESTART_DELAY);
             }
         });
 
         // Kill FFmpeg after 5 seconds if it doesn't finish
-        setTimeout(() => {
-            ff.kill();
+        const killTimeout = setTimeout(() => {
+            isKilled = true;
+            ff.kill('SIGKILL'); // Force kill
         }, 5000);
+
+        // Clean up timeout when process closes
+        ff.on('close', () => {
+            clearTimeout(killTimeout);
+        });
     }
 
     // Try to detect metadata immediately
@@ -122,7 +143,13 @@ function startRadioMetadataDetection(radioUrl, queue) {
                 clearInterval(metadataInterval);
                 metadataInterval = null;
             }
-        }
+        },
+        getStatus: () => ({
+            currentSong,
+            lastSuccessfulDetection,
+            consecutiveErrors,
+            isRunning: !!metadataInterval
+        })
     };
 }
 

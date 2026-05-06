@@ -638,6 +638,10 @@ async function playSong(guild, song) {
 
     queue.player.play(resource)
 
+    // Remove existing listeners to prevent accumulation
+    queue.player.removeAllListeners("error")
+    queue.connection.removeAllListeners("error")
+
     queue.player.on("error", (err) => {
         console.error("Audio player error:", err)
         queue.textChannel.send("❌ Error playing audio, skipping to next...")
