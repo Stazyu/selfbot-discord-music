@@ -1,3 +1,21 @@
+async function removeAllReactionsFromChannel(channel) {
+    try {
+        const messages = await channel.messages.fetch({ limit: 20 })
+        for (const [id, msg] of messages) {
+            if (msg.reactions.cache.size > 0) {
+                try {
+                    await msg.reactions.removeAll()
+                    console.log("Removed reactions from message:", id)
+                } catch (err) {
+                    console.error("Error removing reactions from message:", id, err)
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Error removing reactions from channel:", err)
+    }
+}
+
 async function removeReactionUI(message, collector) {
     if (!message) return
 
@@ -20,9 +38,13 @@ async function createReactionUI(message, queue) {
 
     console.log("Creating reaction UI for message:", message.id)
 
-    // Remove reaction UI from previous message if exists
-    if (queue.reactionMessage && queue.reactionCollector) {
-        await removeReactionUI(queue.reactionMessage, queue.reactionCollector)
+    // Remove all reactions from channel to avoid spam
+    await removeAllReactionsFromChannel(message.channel)
+
+    // Stop previous collector if exists
+    if (queue.reactionCollector && typeof queue.reactionCollector.stop === "function") {
+        queue.reactionCollector.stop()
+        console.log("Stopped previous reaction collector")
     }
 
     try {
@@ -124,9 +146,13 @@ async function createCommandPanel(message, queue) {
 
     console.log("Creating command panel for message:", message.id)
 
-    // Remove reaction UI from previous message if exists
-    if (queue.panelMessage && queue.panelCollector) {
-        await removeReactionUI(queue.panelMessage, queue.panelCollector)
+    // Remove all reactions from channel to avoid spam
+    await removeAllReactionsFromChannel(message.channel)
+
+    // Stop previous panel collector if exists
+    if (queue.panelCollector && typeof queue.panelCollector.stop === "function") {
+        queue.panelCollector.stop()
+        console.log("Stopped previous panel collector")
     }
 
     const panelContent = `🎵 **Music Control Panel** 🎵
