@@ -12,8 +12,8 @@ function startRadioMetadataDetection(radioUrl, queue) {
     const MAX_CONSECUTIVE_ERRORS = 3;
     const ERROR_RESTART_DELAY = 30000; // 30 seconds
 
-    function detectMetadata() {
-        console.log('[radio] Metadata detection cycle started');
+    function detectMetadata(isInitial = false) {
+        console.log(`[radio] Metadata detection cycle started (${isInitial ? 'initial' : 'interval'})`);
         if (queue.radioStopped) {
             console.log('[radio] Metadata detection stopped');
             if (metadataInterval) {
@@ -33,9 +33,14 @@ function startRadioMetadataDetection(radioUrl, queue) {
             consecutiveErrors = MAX_CONSECUTIVE_ERRORS; // Force restart
         }
 
+        // Use faster settings for initial detection, slower for intervals
+        const timeout = isInitial ? 5000 : 8000;
+        const analyzeDuration = isInitial ? 5000000 : 10000000;
+        const probeSize = isInitial ? 5000000 : 50000000;
+
         const ff = spawn(ffmpeg, [
-            '-analyzeduration', '10000000',
-            '-probesize', '50000000',
+            '-analyzeduration', analyzeDuration.toString(),
+            '-probesize', probeSize.toString(),
             '-i', radioUrl,
             '-f', 'null',
             '-',
@@ -183,11 +188,11 @@ function startRadioMetadataDetection(radioUrl, queue) {
             }
         });
 
-        // Kill FFmpeg after 15 seconds if it doesn't finish (radio streams need more time)
+        // Kill FFmpeg after timeout (faster for initial detection)
         const killTimeout = setTimeout(() => {
             isKilled = true;
             ff.kill('SIGKILL'); // Force kill
-        }, 15000);
+        }, timeout);
 
         // Clean up timeout when process closes
         ff.on('close', () => {
@@ -195,11 +200,12 @@ function startRadioMetadataDetection(radioUrl, queue) {
         });
     }
 
-    // Try to detect metadata immediately
-    detectMetadata();
-    // Then check every 5 seconds for updates (more frequent for better detection)
+    // Try to detect metadata immediately (faster initial detection)
+    console.log('[radio] Starting initial metadata detection (fast mode)');
+    detectMetadata(true);
+    // Then check every 5 seconds for updates (slower but more thorough)
     console.log('[radio] Setting up metadata detection interval: 5000ms');
-    metadataInterval = setInterval(detectMetadata, 5000);
+    metadataInterval = setInterval(() => detectMetadata(false), 5000);
     console.log('[radio] Metadata detection interval started');
 
     return {
