@@ -120,7 +120,7 @@ function setPlaySongFunction(fn) {
 }
 
 async function createCommandPanel(message, queue) {
-    const controls = ["⏮", "⏯️", "⏭", "🔉", "🔊", "⏹", "📻", "🎵", "️🗑️", "ℹ️"]
+    const controls = ["⏮", "⏯️", "⏭", "🔉", "🔊", "⏹", "📻", "🎵", "🗑️", "ℹ️"]
 
     console.log("Creating command panel for message:", message.id)
 
