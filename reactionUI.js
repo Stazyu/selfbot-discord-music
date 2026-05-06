@@ -1,8 +1,29 @@
+async function removeReactionUI(message, collector) {
+    if (!message) return
+
+    try {
+        await message.reactions.removeAll()
+        console.log("Removed reactions from message:", message.id)
+    } catch (err) {
+        console.error("Error removing reactions:", err)
+    }
+
+    if (collector && typeof collector.stop === "function") {
+        collector.stop()
+        console.log("Stopped reaction collector")
+    }
+}
+
 async function createReactionUI(message, queue) {
 
     const controls = ["⏯", "⏭", "🔉", "🔊", "⏹"]
 
     console.log("Creating reaction UI for message:", message.id)
+
+    // Remove reaction UI from previous message if exists
+    if (queue.reactionMessage && queue.reactionCollector) {
+        await removeReactionUI(queue.reactionMessage, queue.reactionCollector)
+    }
 
     try {
         for (const emoji of controls) {
@@ -84,7 +105,11 @@ async function createReactionUI(message, queue) {
 
     })
 
+    // Update queue with new reaction message and collector
+    queue.reactionMessage = message
+    queue.reactionCollector = collector
+
     return collector
 }
 
-module.exports = { createReactionUI }
+module.exports = { createReactionUI, removeReactionUI }

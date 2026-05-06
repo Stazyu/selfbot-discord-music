@@ -37,12 +37,17 @@ if (!config.token) {
 
 const ytdlpExecutable = process.platform === "win32" ? "./yt-dlp.exe" : "yt-dlp"
 
+function formatDuration(seconds) {
+    if (!seconds) return null
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
 async function getPlaylistVideos(url) {
     return new Promise((resolve, reject) => {
         const ytdlp = spawn(ytdlpExecutable, [
-            "--flat-playlist",
-            "--get-id",
-            "--get-title",
+            "--dump-single-json",
             url
         ])
 
@@ -62,19 +67,20 @@ async function getPlaylistVideos(url) {
                 return
             }
 
-            const lines = output.trim().split("\n")
-            const videos = []
+            try {
+                const data = JSON.parse(output)
+                const videos = data.entries.map(video => ({
+                    title: video.title,
+                    url: `https://www.youtube.com/watch?v=${video.id}`,
+                    duration: video.duration,
+                    durationFormatted: formatDuration(video.duration)
+                }))
 
-            for (let i = 0; i < lines.length; i += 2) {
-                if (lines[i] && lines[i + 1]) {
-                    videos.push({
-                        title: lines[i],
-                        url: `https://www.youtube.com/watch?v=${lines[i + 1]}`
-                    })
-                }
+                resolve(videos)
+            } catch (err) {
+                console.error("Error parsing JSON:", err)
+                reject(new Error("Failed to parse yt-dlp JSON output"))
             }
-
-            resolve(videos)
         })
 
         ytdlp.on("error", reject)
@@ -580,7 +586,11 @@ async function playSong(guild, song) {
             queue.reactionCollector.stop()
             queue.reactionCollector = null
         }
-        queue.hasReactionUI = false
+        if (queue.reactionMessage) {
+            const { removeReactionUI } = require("./reactionUI")
+            await removeReactionUI(queue.reactionMessage, null)
+            queue.reactionMessage = null
+        }
         if (queue.radioUrl && queue.radioName) {
             queue.radioStopped = false
             queue.textChannel?.send("✅ Musik selesai, kembali ke radio...")
@@ -659,10 +669,7 @@ async function playSong(guild, song) {
     })
 
     const nowPlayingMsg = await queue.textChannel.send(`🎵 Now playing **${song.title}** 🎵`)
-    if (!queue.hasReactionUI) {
-        queue.reactionCollector = createReactionUI(nowPlayingMsg, queue)
-        queue.hasReactionUI = true
-    }
+    queue.reactionCollector = createReactionUI(nowPlayingMsg, queue)
     saveState()
 
     queue.player.once(AudioPlayerStatus.Idle, () => {
@@ -779,10 +786,7 @@ async function playRadio(guild, radioUrl, radioName) {
         // Send new radio message if first time or no existing message
         const radioMsg = await queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
         queue.radioMessage = radioMsg
-        if (!queue.hasReactionUI) {
-            queue.reactionCollector = createReactionUI(radioMsg, queue)
-            queue.hasReactionUI = true
-        }
+        queue.reactionCollector = createReactionUI(radioMsg, queue)
     }
 
     if (queue.reconnectMessage) {
@@ -854,10 +858,7 @@ client.on("messageCreate", async msg => {
                 })
 
                 const addedMsg = await msg.channel.send(`📥 Added **${songs[0].title}**`)
-                if (!queue.hasReactionUI) {
-                    queue.reactionCollector = createReactionUI(addedMsg, queue)
-                    queue.hasReactionUI = true
-                }
+                queue.reactionCollector = createReactionUI(addedMsg, queue)
 
             }
 
@@ -873,10 +874,7 @@ client.on("messageCreate", async msg => {
             })
 
             const addedMsg = await msg.channel.send(`📥 Added **${songs[0].title}**`)
-            if (!queue.hasReactionUI) {
-                queue.reactionCollector = createReactionUI(addedMsg, queue)
-                queue.hasReactionUI = true
-            }
+            queue.reactionCollector = createReactionUI(addedMsg, queue)
 
         }
 
@@ -899,7 +897,6 @@ client.on("messageCreate", async msg => {
                 songs: [],
                 voiceChannelId: voice.id,
                 volume: 1.0,
-                hasReactionUI: false,
                 playHistory: []
             }
 
