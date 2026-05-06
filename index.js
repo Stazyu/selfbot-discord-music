@@ -135,10 +135,9 @@ function loadState() {
 
 client.on("ready", async () => {
     console.log("✅ Logged in as", client.user.tag)
-    
-    // Set functions for reactionUI
+
+    // Set playSong function for reactionUI
     setPlaySongFunction(playSong)
-    setPlayRadioFunction(playRadio)
     const state = loadState()
     if (state) {
         for (const [guildId, guildState] of Object.entries(state)) {

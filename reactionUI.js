@@ -138,9 +138,8 @@ async function createCommandPanel(message, queue) {
 🔉 - Volume Down
 🔊 - Volume Up
 ⏹ - Stop & Clear Queue
-📻 - Radio Info
+📻 - Back to Radio
 🎵 - Music Mode
-📻▶️ - Back to Radio
 🗑️ - Clear Chat
 ℹ️ - Show Queue Info
 
@@ -245,15 +244,6 @@ async function createCommandPanel(message, queue) {
                 queue.textChannel.send("⏹️ Stopped & Queue Cleared")
                 break
 
-            case "📻":
-                // Radio info
-                if (queue.radioUrl && queue.radioName) {
-                    queue.textChannel.send(`📻 Radio: **${queue.radioName}**`)
-                } else {
-                    queue.textChannel.send("ℹ️ No radio playing. Use ?radio <station> to start")
-                }
-                break
-
             case "🎵":
                 // Music Mode - switch from radio to music if queue has songs
                 if (queue.songs.length > 0) {
@@ -277,8 +267,12 @@ async function createCommandPanel(message, queue) {
                         queue.currentProcesses.ff.kill()
                     }
                     queue.radioStopped = false
-                    queue.textChannel.send("📻▶️ Switching back to Radio Mode")
-                    playRadio(queue.textChannel.guild, queue.radioUrl, queue.radioName)
+                    queue.textChannel.send("📻 Switching back to Radio Mode")
+                    // Use setTimeout to avoid circular dependency
+                    setTimeout(() => {
+                        const { playRadio } = require("./index.js")
+                        playRadio(queue.textChannel.guild, queue.radioUrl, queue.radioName)
+                    }, 100)
                 } else {
                     queue.textChannel.send("ℹ️ No radio station available. Use ?radio to set a station first")
                 }
