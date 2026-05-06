@@ -110,7 +110,9 @@ function saveState() {
             textChannelId: queue.textChannel?.id,
             playHistory: queue.playHistory || [],
             loopMode: queue.loopMode || 0,
-            playing: queue.playing || false
+            playing: queue.playing || false,
+            musicReconnectAttempts: queue.musicReconnectAttempts || 0,
+            isMusicReconnecting: queue.isMusicReconnecting || false
         }
     }
     try {
@@ -176,7 +178,10 @@ client.on("ready", async () => {
                     playHistory: guildState.playHistory || [],
                     loopMode: guildState.loopMode || 0,
                     isSkipping: false,
-                    playing: guildState.playing || false
+                    playing: guildState.playing || false,
+                    musicReconnectAttempts: guildState.musicReconnectAttempts || 0,
+                    musicReconnectMessage: null,
+                    isMusicReconnecting: guildState.isMusicReconnecting || false
                 }
                 queues.set(guildId, queue)
 
@@ -290,6 +295,9 @@ async function resumeAllMusic() {
             queue.isReconnecting = false
             queue.radioReconnectAttempts = 0
             queue.reconnectMessage = null
+            queue.isMusicReconnecting = false
+            queue.musicReconnectAttempts = 0
+            queue.musicReconnectMessage = null
 
             if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
                 console.log(`🔄 Resuming radio: ${queue.radioName}`)
@@ -345,6 +353,9 @@ client.on("voiceStateUpdate", (oldState, newState) => {
                             queue.connection = connection
                             queue.textChannel?.send("✅ Berhasil rejoin ke VC")
                             queue.radioReconnectAttempts = 0 // Reset radioReconnectAttempts
+                            queue.musicReconnectAttempts = 0 // Reset musicReconnectAttempts
+                            queue.isMusicReconnecting = false
+                            queue.musicReconnectMessage = null
 
                             if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
                                 playRadio(guild, queue.radioUrl, queue.radioName)
@@ -662,6 +673,48 @@ async function playSong(guild, song) {
 
     queue.currentProcesses = audio.processes
 
+    // Initialize music reconnection tracking
+    if (!queue.musicReconnectAttempts) {
+        queue.musicReconnectAttempts = 0
+    }
+    if (!queue.musicReconnectMessage) {
+        queue.musicReconnectMessage = null
+    }
+    if (!queue.isMusicReconnecting) {
+        queue.isMusicReconnecting = false
+    }
+
+    const MAX_MUSIC_RECONNECT_ATTEMPTS = 3
+
+    // Add error handling for ffmpeg processes
+    audio.processes.ytdlp.on("error", (err) => {
+        console.error("yt-dlp error:", err)
+        if (!queue.isMusicReconnecting && !queue.radioStopped) {
+            handleMusicStreamingError(guild, song, "yt-dlp")
+        }
+    })
+
+    audio.processes.ff.on("error", (err) => {
+        console.error("ffmpeg error:", err)
+        if (!queue.isMusicReconnecting && !queue.radioStopped) {
+            handleMusicStreamingError(guild, song, "ffmpeg")
+        }
+    })
+
+    audio.processes.ytdlp.on("close", (code) => {
+        if (code !== 0 && code !== null && !queue.isMusicReconnecting && !queue.radioStopped) {
+            console.error("yt-dlp exited with code:", code)
+            handleMusicStreamingError(guild, song, "yt-dlp")
+        }
+    })
+
+    audio.processes.ff.on("close", (code) => {
+        if (code !== 0 && code !== null && !queue.isMusicReconnecting && !queue.radioStopped) {
+            console.error("ffmpeg exited with code:", code)
+            handleMusicStreamingError(guild, song, "ffmpeg")
+        }
+    })
+
     queue.player.play(resource)
 
     // Remove existing listeners to prevent accumulation
@@ -670,9 +723,9 @@ async function playSong(guild, song) {
 
     queue.player.on("error", (err) => {
         console.error("Audio player error:", err)
-        queue.textChannel.send("❌ Error playing audio, skipping to next...")
-        queue.songs.shift()
-        playSong(guild, queue.songs[0])
+        if (!queue.isMusicReconnecting && !queue.radioStopped) {
+            handleMusicStreamingError(guild, song, "player")
+        }
     })
 
     queue.connection.on("error", (err) => {
@@ -680,7 +733,7 @@ async function playSong(guild, song) {
         queue.textChannel.send("❌ Error connecting to voice channel, stopping music...")
         queue.songs = []
         queue.player.stop()
-        queues.delete(msg.guild.id)
+        queues.delete(guild.id)
         saveState()
     })
 
@@ -697,6 +750,11 @@ async function playSong(guild, song) {
         // Reset playing state temporarily before next song
         queue.playing = false
 
+        // Reset music reconnection tracking on successful playback
+        queue.musicReconnectAttempts = 0
+        queue.isMusicReconnecting = false
+        queue.musicReconnectMessage = null
+
         if (queue.isSkipping || (queue.loopMode || 0) === 0) {
             queue.songs.shift()
             queue.isSkipping = false
@@ -709,6 +767,49 @@ async function playSong(guild, song) {
         playSong(guild, queue.songs[0])
     })
 
+}
+
+function handleMusicStreamingError(guild, song, source) {
+    const queue = queues.get(guild.id)
+    if (!queue) return
+
+    console.log(`[music] ${source} failed, attempting reconnect...`)
+    queue.isMusicReconnecting = true
+    queue.musicReconnectAttempts++
+
+    const MAX_MUSIC_RECONNECT_ATTEMPTS = 3
+
+    if (queue.musicReconnectAttempts >= MAX_MUSIC_RECONNECT_ATTEMPTS) {
+        queue.textChannel.send(`❌ Musik gagal diputar setelah ${MAX_MUSIC_RECONNECT_ATTEMPTS} percobaan reconnect. Melanjutkan ke lagu berikutnya...`)
+        queue.musicReconnectAttempts = 0
+        queue.isMusicReconnecting = false
+        queue.musicReconnectMessage = null
+        queue.songs.shift()
+        playSong(guild, queue.songs[0])
+        return
+    }
+
+    const delay = Math.min(3000 * Math.pow(2, queue.musicReconnectAttempts - 1), 10000)
+    const reconnectText = `❌ Musik terputus (${source}), mencoba reconnect (${queue.musicReconnectAttempts}/${MAX_MUSIC_RECONNECT_ATTEMPTS}) dalam ${delay / 1000} detik...`
+
+    if (queue.musicReconnectMessage) {
+        queue.musicReconnectMessage.edit(reconnectText).catch(console.error)
+    } else {
+        queue.textChannel.send(reconnectText).then(msg => {
+            queue.musicReconnectMessage = msg
+        }).catch(console.error)
+    }
+
+    setTimeout(() => {
+        const currentQueue = queues.get(guild.id)
+        if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
+            console.log(`[music] Attempting to reconnect to: ${song.title}`)
+            queue.isMusicReconnecting = false
+            playSong(guild, song)
+        } else {
+            queue.isMusicReconnecting = false
+        }
+    }, delay)
 }
 
 async function playRadio(guild, radioUrl, radioName) {
@@ -986,7 +1087,10 @@ client.on("messageCreate", async msg => {
                 playing: false,
                 radioUrl: null,
                 radioName: null,
-                radioStopped: true
+                radioStopped: true,
+                musicReconnectAttempts: 0,
+                musicReconnectMessage: null,
+                isMusicReconnecting: false
             }
 
             queues.set(msg.guild.id, queue)
@@ -1001,6 +1105,9 @@ client.on("messageCreate", async msg => {
         queue.radioStopped = true
         queue.playing = false
         queue.isReconnecting = false
+        queue.isMusicReconnecting = false
+        queue.musicReconnectAttempts = 0
+        queue.musicReconnectMessage = null
 
         queue.songs.push(...songs)
         console.log(`🎵 Adding ${songs.length} songs to queue. Total songs: ${queue.songs.length}`)
@@ -1088,10 +1195,12 @@ client.on("messageCreate", async msg => {
             queue.radioStopped = true
             queue.playing = false
             queue.isReconnecting = false
+            queue.isMusicReconnecting = false
             queue.radioUrl = null
             queue.radioName = null
             queue.hasReactionUI = false
             queue.radioMessage = null
+            queue.musicReconnectMessage = null
         }
         queue.songs = []
         queue.player.stop()
@@ -1160,7 +1269,10 @@ client.on("messageCreate", async msg => {
                     hasReactionUI: false,
                     playHistory: [],
                     loopMode: 0,
-                    isSkipping: false
+                    isSkipping: false,
+                    musicReconnectAttempts: 0,
+                    musicReconnectMessage: null,
+                    isMusicReconnecting: false
                 }
 
                 queues.set(msg.guild.id, queue)
