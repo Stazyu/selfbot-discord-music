@@ -112,4 +112,177 @@ async function createReactionUI(message, queue) {
     return collector
 }
 
-module.exports = { createReactionUI, removeReactionUI }
+async function createCommandPanel(message, queue) {
+    const controls = ["⏮", "▶️", "⏭", "🔊", "⏹", "📻", "🗑️", "ℹ️"]
+
+    console.log("Creating command panel for message:", message.id)
+
+    // Remove reaction UI from previous message if exists
+    if (queue.panelMessage && queue.panelCollector) {
+        await removeReactionUI(queue.panelMessage, queue.panelCollector)
+    }
+
+    const panelContent = `🎵 **Music Control Panel** 🎵
+
+**Controls:**
+⏮ - Previous song (if in queue)
+▶️ - Play/Pause
+⏭ - Skip current song
+🔊 - Volume Up
+⏹ - Stop & Clear Queue
+📻 - Radio Mode
+🗑️ - Clear Chat
+ℹ️ - Show Queue Info
+
+**Available Commands:**
+?play <song/url> - Play music
+?radio <station> - Play radio
+?skip - Skip song
+?stop - Stop music
+?leave - Leave VC
+?volume <0-100> - Set volume
+?clearchat <amount> - Clear messages
+?sync - Sync state
+?panel - Show this panel`
+
+    const panelMsg = await message.channel.send(panelContent)
+
+    try {
+        for (const emoji of controls) {
+            await panelMsg.react(emoji)
+        }
+        console.log("Panel reactions added successfully")
+    } catch (err) {
+        console.error("Error adding panel reactions:", err)
+    }
+
+    const filter = (reaction, user) => {
+        return controls.includes(reaction.emoji.name) && !user.bot
+    }
+
+    const collector = panelMsg.createReactionCollector({
+        filter
+    })
+
+    collector.on("collect", async (reaction, user) => {
+        switch (reaction.emoji.name) {
+            case "⏮":
+                // Previous song (if queue has more than 1 song)
+                if (queue.songs.length > 1) {
+                    queue.songs.unshift(queue.songs.pop())
+                    if (queue.currentProcesses) {
+                        queue.currentProcesses.ytdlp.kill()
+                        queue.currentProcesses.ff.kill()
+                    }
+                    queue.player.stop()
+                    queue.textChannel.send("⏮️ Playing previous song")
+                } else {
+                    queue.textChannel.send("ℹ️ No previous song in queue")
+                }
+                break
+
+            case "▶️":
+                // Play/Pause
+                if (queue.player.state.status === "paused") {
+                    queue.player.unpause()
+                    queue.textChannel.send("▶️ Resumed")
+                } else {
+                    queue.player.pause()
+                    queue.textChannel.send("⏸️ Paused")
+                }
+                break
+
+            case "⏭":
+                // Skip
+                if (queue.currentProcesses) {
+                    queue.currentProcesses.ytdlp.kill()
+                    queue.currentProcesses.ff.kill()
+                }
+                queue.player.stop()
+                queue.textChannel.send("⏭️ Skipped")
+                break
+
+            case "🔊":
+                // Volume up
+                queue.volume = Math.min(5, (queue.volume ?? 1.0) + 0.2)
+                if (queue.player.state.status === "playing" && queue.player.state.resource?.volume) {
+                    queue.player.state.resource.volume.setVolume(queue.volume)
+                }
+                queue.textChannel.send(`🔊 Volume: **${Math.round(queue.volume * 100)}%**`)
+                break
+
+            case "⏹":
+                // Stop & Clear
+                if (queue.currentProcesses) {
+                    queue.currentProcesses.ytdlp.kill()
+                    queue.currentProcesses.ff.kill()
+                }
+                if (queue.radioFfmpeg) {
+                    queue.radioFfmpeg.kill()
+                }
+                queue.songs = []
+                queue.radioStopped = true
+                queue.player.stop()
+                queue.textChannel.send("⏹️ Stopped & Queue Cleared")
+                break
+
+            case "📻":
+                // Radio info
+                if (queue.radioUrl && queue.radioName) {
+                    queue.textChannel.send(`📻 Radio: **${queue.radioName}**`)
+                } else {
+                    queue.textChannel.send("ℹ️ No radio playing. Use ?radio <station> to start")
+                }
+                break
+
+            case "🗑️":
+                // Clear last 10 messages
+                const messages = await queue.textChannel.messages.fetch({ limit: 11 })
+                const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
+                const messagesToDelete = messages.filter(m => m.createdTimestamp > twoWeeksAgo && m.id !== panelMsg.id)
+
+                let deletedCount = 0
+                for (const [id, msg] of messagesToDelete) {
+                    try {
+                        await msg.delete()
+                        deletedCount++
+                    } catch (err) {
+                        console.error("Error deleting message:", err)
+                    }
+                }
+                queue.textChannel.send(`🗑️ Deleted **${deletedCount}** messages`)
+                break
+
+            case "ℹ️":
+                // Queue info
+                let queueInfo = `📋 **Queue Info**\n\n`
+                if (queue.currentSong) {
+                    queueInfo += `🎵 Now Playing: **${queue.currentSong.title}**\n`
+                }
+                queueInfo += `🔊 Volume: **${Math.round((queue.volume ?? 1.0) * 100)}%**\n`
+                queueInfo += `📝 Songs in Queue: **${queue.songs.length}**\n`
+                if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
+                    queueInfo += `📻 Radio: **${queue.radioName}**\n`
+                }
+                if (queue.playHistory && queue.playHistory.length > 0) {
+                    queueInfo += `\n🕐 **Recently Played:**\n`
+                    queue.playHistory.slice(0, 5).forEach((song, i) => {
+                        queueInfo += `${i + 1}. ${song.title}\n`
+                    })
+                }
+                queue.textChannel.send(queueInfo)
+                break
+        }
+
+        // Remove the reaction after handling
+        reaction.users.remove(user.id).catch(console.error)
+    })
+
+    // Update queue with panel message and collector
+    queue.panelMessage = panelMsg
+    queue.panelCollector = collector
+
+    return collector
+}
+
+module.exports = { createReactionUI, removeReactionUI, createCommandPanel }

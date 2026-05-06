@@ -7,7 +7,7 @@ const https = require("https")
 const fs = require("fs")
 const path = require("path")
 const dotenv = require("dotenv")
-const { createReactionUI } = require("./reactionUI")
+const { createReactionUI, createCommandPanel } = require("./reactionUI")
 const { startRadioMetadataDetection } = require("./radioMetadata")
 const { searchSong } = require("./yt")
 dotenv.config()
@@ -1159,12 +1159,20 @@ client.on("messageCreate", async msg => {
 **?leave** - Leave voice channel and clear queue
 **?sync** - Sync channel ID dan auto-join ke voice channel saat ini
 **?state** - Show current bot state
+**?panel** - Show control panel with reaction UI
 **?help** - Show this help message
 
 *You must be in a voice channel to use these commands*
         `.trim()
 
         msg.channel.send(helpEmbed)
+    }
+
+    if (cmd === "panel") {
+        if (!queue) {
+            return msg.reply("❌ Bot belum join ke voice channel. Gunakan command ?play atau ?radio terlebih dahulu.")
+        }
+        createCommandPanel(msg, queue)
     }
 
     if (cmd === "state") {
