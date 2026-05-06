@@ -69,9 +69,15 @@ function startRadioMetadataDetection(radioUrl, queue) {
             } else if (icyMatch) {
                 // Check if icy-name contains song info or just station name
                 const icyName = icyMatch[1];
-                // Skip if it looks like a station name (contains "FM", "Radio", etc.)
-                if (icyName.match(/FM|RADIO|STATION/i)) {
+                // Skip if it looks like a station name (contains radio station keywords)
+                if (icyName.match(/FM|RADIO|STATION|iRadio|PRAMBORS|RRI|ELSHINTA|TRAX|GEN|ARDAN|SMART|PAS|MARA|SWARA|MUSIC|HITS|CHANNEL|NETWORK/i)) {
                     console.log(`[radio] Skipping station name from icy-name: ${icyName}`);
+                } else if (icyName.length < 3) {
+                    // Skip if too short (likely not a song title)
+                    console.log(`[radio] Skipping too short title from icy-name: ${icyName}`);
+                } else if (icyName.match(/^[0-9\s\.\-]+$/)) {
+                    // Skip if only numbers/symbols (likely frequency)
+                    console.log(`[radio] Skipping frequency from icy-name: ${icyName}`);
                 } else {
                     songTitle = icyName;
                     console.log(`[radio] Metadata found via icy-name: ${songTitle}`);
@@ -86,8 +92,14 @@ function startRadioMetadataDetection(radioUrl, queue) {
             }
 
             if (songTitle && songTitle !== currentSong) {
-                // Skip error messages from being added to play history
-                if (songTitle.includes('0kB other streams:0kB global headers:0kB muxing overhead: unknown')) {
+                // Skip error messages and invalid content
+                if (songTitle.includes('0kB other streams:0kB global headers:0kB muxing overhead: unknown') ||
+                    songTitle.includes('ffmpeg') ||
+                    songTitle.includes('error') ||
+                    songTitle.includes('Input') ||
+                    songTitle.includes('Output') ||
+                    songTitle.length < 3) {
+                    console.log(`[radio] Skipping invalid content: ${songTitle}`);
                     return;
                 }
 

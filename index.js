@@ -799,6 +799,7 @@ async function playRadio(guild, radioUrl, radioName) {
             queue.radioFfmpeg.kill()
         }
         queue.radioStopped = true
+        queue.playing = false
         queue.isReconnecting = false
         queue.radioReconnectAttempts = 0
         queues.delete(guild.id)
@@ -822,6 +823,9 @@ async function playRadio(guild, radioUrl, radioName) {
 
     // Reset reconnecting flag after successful reconnect
     queue.isReconnecting = false
+
+    // Set playing state for radio
+    queue.playing = true
 
     // Start metadata detection for current song
     queue.metadataDetector = startRadioMetadataDetection(radioUrl, queue)
@@ -991,6 +995,7 @@ client.on("messageCreate", async msg => {
             queue.radioFfmpeg = null
         }
         queue.radioStopped = true
+        queue.playing = false
         queue.isReconnecting = false
 
         queue.songs.push(...songs)
@@ -1073,6 +1078,7 @@ client.on("messageCreate", async msg => {
         }
         if (queue) {
             queue.radioStopped = true
+            queue.playing = false
             queue.isReconnecting = false
             queue.radioUrl = null
             queue.radioName = null
