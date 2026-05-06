@@ -106,7 +106,8 @@ function saveState() {
             radioName: queue.radioName,
             radioStopped: queue.radioStopped,
             textChannelId: queue.textChannel?.id,
-            playHistory: queue.playHistory || []
+            playHistory: queue.playHistory || [],
+            loopMode: queue.loopMode || 0
         }
     }
     try {
@@ -169,7 +170,9 @@ client.on("ready", async () => {
                     player: player,
                     connection: connection,
                     volume: guildState.volume ?? 1.0,
-                    playHistory: guildState.playHistory || []
+                    playHistory: guildState.playHistory || [],
+                    loopMode: guildState.loopMode || 0,
+                    isSkipping: false
                 }
                 queues.set(guildId, queue)
 
@@ -680,7 +683,16 @@ async function playSong(guild, song) {
             queue.currentProcesses.ytdlp.kill()
             queue.currentProcesses.ff.kill()
         }
-        queue.songs.shift()
+
+        if (queue.isSkipping || (queue.loopMode || 0) === 0) {
+            queue.songs.shift()
+            queue.isSkipping = false
+        } else if (queue.loopMode === 2) {
+            const shiftedSong = queue.songs.shift()
+            queue.songs.push(shiftedSong)
+        }
+        // loopMode === 1: keep current song at index 0
+
         playSong(guild, queue.songs[0])
     })
 
@@ -861,7 +873,6 @@ client.on("messageCreate", async msg => {
                 })
 
                 const addedMsg = await msg.channel.send(`📥 Added **${songs[0].title}**`)
-                queue.reactionCollector = createReactionUI(addedMsg, queue)
 
             }
 
@@ -877,7 +888,6 @@ client.on("messageCreate", async msg => {
             })
 
             const addedMsg = await msg.channel.send(`📥 Added **${songs[0].title}**`)
-            queue.reactionCollector = createReactionUI(addedMsg, queue)
 
         }
 
@@ -900,7 +910,9 @@ client.on("messageCreate", async msg => {
                 songs: [],
                 voiceChannelId: voice.id,
                 volume: 1.0,
-                playHistory: []
+                playHistory: [],
+                loopMode: 0,
+                isSkipping: false
             }
 
             queues.set(msg.guild.id, queue)
@@ -925,12 +937,58 @@ client.on("messageCreate", async msg => {
     }
 
     if (cmd === "skip") {
-        if (queue?.currentProcesses) {
-            queue.currentProcesses.ytdlp.kill()
-            queue.currentProcesses.ff.kill()
+        if (queue) {
+            queue.isSkipping = true
+            if (queue.currentProcesses) {
+                queue.currentProcesses.ytdlp.kill()
+                queue.currentProcesses.ff.kill()
+            }
+            queue.player.stop()
+            saveState()
+            msg.channel.send("⏭️ Skipped!")
         }
-        queue?.player.stop()
+    }
+
+    if (cmd === "loop") {
+        if (!queue) return msg.reply("Tidak ada queue yang aktif")
+        queue.loopMode = ((queue.loopMode || 0) + 1) % 3
+        const modes = ["Off ❌", "Single 🔂", "All 🔁"]
+        msg.channel.send(`🔂 Loop mode set to: **${modes[queue.loopMode]}**`)
         saveState()
+    }
+
+    if (cmd === "shuffle") {
+        if (!queue || queue.songs.length < 3)
+            return msg.reply("Butuh minimal 2 lagu di antrean untuk shuffle")
+
+        // Fisher-Yates shuffle excluding the first song (currently playing)
+        const playing = queue.songs.shift()
+        for (let i = queue.songs.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [queue.songs[i], queue.songs[j]] = [queue.songs[j], queue.songs[i]];
+        }
+        queue.songs.unshift(playing)
+        msg.channel.send("🔀 Queue berhasil di-shuffle!")
+        saveState()
+    }
+
+    if (cmd === "queue") {
+        if (!queue || queue.songs.length === 0)
+            return msg.channel.send("Queue kosong")
+
+        const modes = ["Off ❌", "Single 🔂", "All 🔁"]
+        const loopStatus = modes[queue.loopMode || 0]
+
+        let queueMsg = `📜 **Queue | Loop: ${loopStatus}**\n\n`
+        queue.songs.slice(0, 10).forEach((song, i) => {
+            queueMsg += `${i + 1}. ${song.title}\n`
+        })
+
+        if (queue.songs.length > 10) {
+            queueMsg += `... and ${queue.songs.length - 10} more`
+        }
+
+        msg.channel.send(queueMsg)
     }
 
     if (cmd === "stop") {
@@ -1018,7 +1076,9 @@ client.on("messageCreate", async msg => {
                     voiceChannelId: voice.id,
                     volume: 1.0,
                     hasReactionUI: false,
-                    playHistory: []
+                    playHistory: [],
+                    loopMode: 0,
+                    isSkipping: false
                 }
 
                 queues.set(msg.guild.id, queue)
@@ -1166,6 +1226,9 @@ client.on("messageCreate", async msg => {
 **?play** <song name or URL> - Play a song from YouTube
 **?play** <playlist URL> [limit] - Play a YouTube playlist (optional limit)
 **?skip** - Skip the current song
+**?loop** - Toggle loop mode (Off/Single/All)
+**?shuffle** - Shuffle the current queue
+**?queue** - Show current queue and loop mode
 **?stop** - Stop playing and clear queue
 **?volume** [0-100] - Set or check playback volume
 **?radio** <station name or URL> - Play a radio station
