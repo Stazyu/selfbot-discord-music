@@ -201,16 +201,23 @@ async function createCommandPanel(message, queue) {
 ℹ️ - Show Queue Info
 
 **Available Commands:**
-?play <song/url> - Play music
-?radio <station> - Play radio
-?skip - Skip song
-?stop - Stop music
-?leave - Leave VC
-?volume <0-100> - Set volume
-?clearchat <amount> - Clear messages
-?clearreactions - Remove all reactions from channel
-?sync - Sync state
-?panel - Show this panel`
+**?play** <song name> - Search and play a song
+**?play** <single URL> - Play a single YouTube video
+**?play** <playlist URL> [limit] - Play a YouTube playlist (optional limit)
+**?play** <URL1 URL2 URL3...> - Play multiple URLs (space-separated)
+**?skip** - Skip the current song
+**?loop** - Toggle loop mode (Off/Single/All)
+**?shuffle** - Shuffle the current queue
+**?queue** - Show current queue and loop mode
+**?stop** - Stop playing and clear queue
+**?volume** [0-100] - Set or check playback volume
+**?radio** <station name or URL> - Play a radio station
+**?clearchat** [number] - Delete messages in text channel (default 100, max 100)
+**?leave** - Leave voice channel and clear queue
+**?sync** - Sync channel ID dan auto-join ke voice channel saat ini
+**?state** - Show current bot state
+**?panel** - Show control panel with reaction UI
+**?help** - Show this help message`
 
     const panelMsg = await message.channel.send(panelContent)
 
@@ -362,6 +369,15 @@ async function createCommandPanel(message, queue) {
                 }
                 queueInfo += `🔊 Volume: **${Math.round((queue.volume ?? 1.0) * 100)}%**\n`
                 queueInfo += `📝 Songs in Queue: **${queue.songs.length}**\n`
+                if (queue.songs.length > 0) {
+                    queueInfo += `\n📜 **Queue List:**\n`
+                    queue.songs.slice(0, 10).forEach((song, i) => {
+                        queueInfo += `${i + 1}. ${song.title}\n`
+                    })
+                    if (queue.songs.length > 10) {
+                        queueInfo += `... and ${queue.songs.length - 10} more\n`
+                    }
+                }
                 if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
                     queueInfo += `📻 Radio: **${queue.radioName}**\n`
                 }
