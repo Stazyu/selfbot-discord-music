@@ -827,8 +827,10 @@ async function playRadio(guild, radioUrl, radioName) {
     // Set playing state for radio
     queue.playing = true
 
-    // Start metadata detection for current song
-    queue.metadataDetector = startRadioMetadataDetection(radioUrl, queue)
+    // Start metadata detection for current song (with small delay to ensure message is set)
+    setTimeout(() => {
+        queue.metadataDetector = startRadioMetadataDetection(radioUrl, queue)
+    }, 2000)
 
     saveState()
 }
