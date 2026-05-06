@@ -83,8 +83,6 @@ client.on("messageCreate", async msg => {
 
         const msg = await channel.send(nowPlayingText)
 
-        createReactionUI(msg, queue)
-
         // msg.channel.send(buildNowPlaying(queue.songs[0]))
     }
 

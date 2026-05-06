@@ -1,14 +1,36 @@
 async function removeAllReactionsFromChannel(channel) {
     try {
-        const messages = await channel.messages.fetch({ limit: 20 })
-        for (const [id, msg] of messages) {
-            if (msg.reactions.cache.size > 0) {
-                try {
-                    await msg.reactions.removeAll()
-                    console.log("Removed reactions from message:", id)
-                } catch (err) {
-                    console.error("Error removing reactions from message:", id, err)
+        let lastId = null
+        let hasMore = true
+
+        while (hasMore) {
+            const options = { limit: 100 }
+            if (lastId) {
+                options.before = lastId
+            }
+
+            const messages = await channel.messages.fetch(options)
+
+            if (messages.size === 0) {
+                hasMore = false
+                break
+            }
+
+            for (const [id, msg] of messages) {
+                if (msg.reactions.cache.size > 0) {
+                    try {
+                        await msg.reactions.removeAll()
+                        console.log("Removed reactions from message:", id)
+                    } catch (err) {
+                        console.error("Error removing reactions from message:", id, err)
+                    }
                 }
+            }
+
+            lastId = messages.last().id
+
+            if (messages.size < 100) {
+                hasMore = false
             }
         }
     } catch (err) {
