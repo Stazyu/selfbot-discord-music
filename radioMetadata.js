@@ -22,6 +22,16 @@ function startRadioMetadataDetection(radioUrl, queue) {
             }
             return;
         }
+
+        // Check if radio FFmpeg process is still alive and valid
+        if (!queue.radioFfmpeg || queue.radioFfmpeg.killed) {
+            console.log('[radio] Radio FFmpeg process is not available or killed, stopping metadata detection');
+            if (metadataInterval) {
+                clearInterval(metadataInterval);
+                metadataInterval = null;
+            }
+            return;
+        }
         // Allow first detection even if interval not set yet
         if (!metadataInterval && Date.now() - lastSuccessfulDetection > 10000) {
             console.log('[radio] Interval not available but continuing detection');
