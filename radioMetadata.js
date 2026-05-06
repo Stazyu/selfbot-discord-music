@@ -14,13 +14,17 @@ function startRadioMetadataDetection(radioUrl, queue) {
 
     function detectMetadata() {
         console.log('[radio] Metadata detection cycle started');
-        if (queue.radioStopped || !metadataInterval) {
-            console.log('[radio] Metadata detection stopped or interval not available');
+        if (queue.radioStopped) {
+            console.log('[radio] Metadata detection stopped');
             if (metadataInterval) {
                 clearInterval(metadataInterval);
                 metadataInterval = null;
             }
             return;
+        }
+        // Allow first detection even if interval not set yet
+        if (!metadataInterval && Date.now() - lastSuccessfulDetection > 10000) {
+            console.log('[radio] Interval not available but continuing detection');
         }
 
         // Check if metadata detection has been stuck for too long (no successful detection for 5 minutes)
