@@ -1056,7 +1056,7 @@ client.on("messageCreate", async msg => {
 
         let queueMsg = `📜 **Queue | Loop: ${loopStatus}**\n\n`
         queue.songs.slice(0, 10).forEach((song, i) => {
-            queueMsg += `${i + 1}. ${song.title}\n`
+            queueMsg += `${i + 1}. ${song.title || "Unknown"}\n`
         })
 
         if (queue.songs.length > 10) {
