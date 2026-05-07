@@ -42,6 +42,7 @@ async function searchSong(query) {
         // Add cookies file if it exists
         const cookiesFile = COOKIES_FILE || path.join(__dirname, 'cookies.txt')
         if (fs.existsSync(cookiesFile)) {
+            console.log("Cookie masuk")
             ytdlpArgs.push("--cookies", cookiesFile)
         }
 
