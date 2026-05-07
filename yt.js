@@ -1,5 +1,4 @@
 const { spawn } = require("child_process")
-const yts = require("yt-search")
 const ffmpeg = require("ffmpeg-static")
 const YouTubeVideoId = require('youtube-video-id').default;
 
@@ -17,38 +16,63 @@ function parseTimestampToSeconds(timestamp) {
 }
 
 async function searchSong(query) {
+    let searchQuery = query
 
     if (query.startsWith("https://")) {
-
-        const res = await yts({ videoId: YouTubeVideoId(query) })
-        const video = res
-        console.log("Video : ", video)
-
-        if (!video || !video.title) {
-            throw new Error("Video not found or invalid")
-        }
-
-        return {
-            title: video.title,
-            url: video.url,
-            duration: parseTimestampToSeconds(video.timestamp),
-            durationFormatted: video.timestamp
-        }
-    }
-    const res = await yts(query)
-
-    const video = res.videos[0]
-
-    if (!video || !video.title) {
-        throw new Error("No videos found for the search query")
+        searchQuery = query
+    } else {
+        searchQuery = `ytsearch:${query}`
     }
 
-    return {
-        title: video.title,
-        url: video.url,
-        duration: parseTimestampToSeconds(video.timestamp),
-        durationFormatted: video.timestamp
-    }
+    return new Promise((resolve, reject) => {
+        const ytdlpArgs = [
+            "--dump-json",
+            "--no-playlist",
+            searchQuery
+        ]
+
+        const ytdlp = spawn(ytdlpExecutable, ytdlpArgs)
+
+        let output = ""
+        let errorOutput = ""
+
+        ytdlp.stdout.on("data", (data) => {
+            output += data.toString()
+        })
+
+        ytdlp.stderr.on("data", (data) => {
+            errorOutput += data.toString()
+        })
+
+        ytdlp.on("close", (code) => {
+            if (code !== 0 || !output) {
+                reject(new Error("Video not found or invalid"))
+                return
+            }
+
+            try {
+                const video = JSON.parse(output)
+
+                if (!video || !video.title) {
+                    reject(new Error("Video not found or invalid"))
+                    return
+                }
+
+                resolve({
+                    title: video.title,
+                    url: video.webpage_url || video.url,
+                    duration: video.duration,
+                    durationFormatted: video.duration_string || `${Math.floor(video.duration / 60)}:${(video.duration % 60).toString().padStart(2, '0')}`
+                })
+            } catch (err) {
+                reject(new Error("Failed to parse video information"))
+            }
+        })
+
+        ytdlp.on("error", (err) => {
+            reject(new Error(`Failed to execute yt-dlp: ${err.message}`))
+        })
+    })
 }
 
 function stream(url) {
