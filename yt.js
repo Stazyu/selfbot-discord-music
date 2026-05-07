@@ -24,6 +24,8 @@ async function searchSong(query) {
         searchQuery = `ytsearch:${query}`
     }
 
+    console.log("Searching with yt-dlp:", searchQuery)
+
     return new Promise((resolve, reject) => {
         const ytdlpArgs = [
             "--dump-json",
@@ -46,7 +48,8 @@ async function searchSong(query) {
 
         ytdlp.on("close", (code) => {
             if (code !== 0 || !output) {
-                reject(new Error("Video not found or invalid"))
+                console.error("yt-dlp error:", errorOutput)
+                reject(new Error(`Video not found or invalid. yt-dlp exit code: ${code}`))
                 return
             }
 
