@@ -11,6 +11,7 @@ services:
       - DISCORD_PREFIX=${DISCORD_PREFIX:-?}
       - ALLOWED_USERS=${ALLOWED_USERS:-}
       - STATE_FILE=/app/data/state.json
+      - COOKIES_FILE=/app/data/cookies.txt
     env_file:
       - .env
     volumes:

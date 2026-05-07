@@ -1,8 +1,12 @@
 const { spawn } = require("child_process")
 const ffmpeg = require("ffmpeg-static")
 const YouTubeVideoId = require('youtube-video-id').default;
+const dotenv = require("dotenv")
+
+dotenv.config();
 
 const ytdlpExecutable = process.platform === "win32" ? "./yt-dlp.exe" : "yt-dlp"
+const COOKIES_FILE = process.env.COOKIES_FILE || path.join(__dirname, "cookies.txt")
 
 function parseTimestampToSeconds(timestamp) {
     if (!timestamp) return null
@@ -36,7 +40,7 @@ async function searchSong(query) {
         ]
 
         // Add cookies file if it exists
-        const cookiesFile = path.join(__dirname, 'cookies.txt')
+        const cookiesFile = COOKIES_FILE || path.join(__dirname, 'cookies.txt')
         if (fs.existsSync(cookiesFile)) {
             ytdlpArgs.push("--cookies", cookiesFile)
         }
@@ -100,7 +104,7 @@ function stream(url) {
     ]
 
     // Add cookies file if it exists
-    const cookiesFile = path.join(__dirname, 'cookies.txt')
+    const cookiesFile = COOKIES_FILE || path.join(__dirname, 'cookies.txt')
     if (fs.existsSync(cookiesFile)) {
         ytdlpArgs.push("--cookies", cookiesFile)
     }
