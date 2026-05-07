@@ -1,0 +1,14 @@
+# YouTube Cookies File
+# This file should be replaced with actual cookies from YouTube
+# Format: Netscape HTTP Cookie File
+# 
+# To get cookies:
+# 1. Use browser extension like "Get cookies.txt LOCALLY" on Chrome/Firefox
+# 2. Go to YouTube and login
+# 3. Export cookies and save as cookies.txt in this directory
+#
+# Example format:
+# .youtube.com	TRUE	/	FALSE	1234567890	PREF	hl=en
+# .youtube.com	TRUE	/	FALSE	1234567890	VISITOR_INFO1_LIVE	abcdefg
+
+# Replace this content with your actual cookies

@@ -17,7 +17,6 @@
     "icy": "^2.1.0",
     "node-fetch": "2.7.0",
     "youtube-video-id": "^1.0.5",
-    "yt-search": "^2.13.1",
-    "ytdl-core": "npm:@distube/ytdl-core"
+    "yt-search": "^2.13.1"
   }
 }

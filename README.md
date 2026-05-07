@@ -8,11 +8,16 @@ A Discord selfbot for playing music in voice channels using yt-dlp and FFmpeg. S
 
 ## Features
 
-- 🎵 Play YouTube videos and playlists
-- 📻 Stream radio stations from Radio Browser
-- ⏭️ Skip and stop music controls
-- 🎧 Queue system for multiple songs
+- 🎵 Play YouTube videos, playlists, and multiple URLs
+- 📻 Stream radio stations from Radio Browser with metadata detection
+- ⏭️ Skip, stop, and volume controls
+- 🎧 Advanced queue system with shuffle and loop modes
 - 🔊 High-quality audio streaming via FFmpeg
+- 🎛️ Interactive reaction UI control panel
+- 💾 Persistent state saving across restarts
+- 🔄 Automatic reconnection for interrupted streams
+- 🧹 Chat cleanup and reaction management
+- 📊 Detailed bot state monitoring
 
 ## Prerequisites
 
@@ -96,9 +101,20 @@ All commands use the `?` prefix. You must be in a voice channel to use them.
 |---------|-------|-------------|
 | `?play` | `?play <song name or URL>` | Play a song from YouTube |
 | `?play` | `?play <playlist URL> [limit]` | Play a YouTube playlist (optional limit) |
+| `?play` | `?play <URL1 URL2 URL3...>` | Play multiple URLs (space-separated) |
 | `?skip` | `?skip` | Skip the current song |
-| `?stop` | `?stop` | Stop playing and clear the queue |
+| `?stop` | `?stop` | Stop playing and clear queue |
+| `?loop` | `?loop` | Toggle loop mode (Off/Single/All) |
+| `?shuffle` | `?shuffle` | Shuffle the current queue |
+| `?queue` | `?queue` | Show current queue and loop mode |
+| `?volume` | `?volume [0-100]` | Set or check playback volume |
 | `?radio` | `?radio <station name or URL>` | Play a radio station |
+| `?clearchat` | `?clearchat [number]` | Delete messages (default 100, max 100) |
+| `?clearreactions` | `?clearreactions` | Remove all reactions from channel |
+| `?leave` | `?leave` | Leave voice channel and clear queue |
+| `?sync` | `?sync` | Sync channel IDs and rejoin voice channel |
+| `?panel` | `?panel` | Show control panel with reaction UI |
+| `?state` | `?state` | Show current bot state |
 | `?help` | `?help` | Show all available commands |
 
 ### Examples
@@ -107,8 +123,15 @@ All commands use the `?` prefix. You must be in a voice channel to use them.
 ?play never gonna give you up
 ?play https://www.youtube.com/watch?v=dQw4w9WgXcQ
 ?play https://www.youtube.com/playlist?list=xyz 10
+?play https://youtu.be/abc123 https://youtu.be/def456 https://youtu.be/ghi789
 ?radio Jazz
 ?radio https://stream.example.com
+?volume 75
+?loop
+?shuffle
+?queue
+?panel
+?state
 ```
 
 ## Configuration
@@ -119,6 +142,7 @@ Set these environment variables:
 
 - `DISCORD_TOKEN` - Your Discord account token (required)
 - `DISCORD_PREFIX` - Command prefix (default: `?`)
+- `ALLOWED_USERS` - Comma-separated list of Discord user IDs (optional, for access control)
 
 **Docker**: Set in `.env` file or Docker Compose environment section
 **Local**: Set in `.env` file or system environment variables
@@ -129,7 +153,8 @@ You can also use `config.json`:
 ```json
 {
   "token": "YOUR_DISCORD_TOKEN_HERE",
-  "prefix": "?"
+  "prefix": "?",
+  "allowedUsers": ["user_id_1", "user_id_2"]
 }
 ```
 
@@ -142,7 +167,10 @@ You can also use `config.json`:
 - `@discordjs/opus` - Opus codec for audio
 - `ffmpeg-static` - Static FFmpeg binary
 - `yt-search` - YouTube search functionality
-- `@distube/ytdl-core` - YouTube downloader
+- `youtube-video-id` - YouTube video ID extraction
+- `node-fetch` - HTTP requests for radio metadata
+- `icy` - ICY metadata parsing for radio streams
+- `dotenv` - Environment variable management
 
 ## Troubleshooting
 
@@ -152,6 +180,9 @@ You can also use `config.json`:
 - **Environment variables not working**: Verify `.env` file is in the project root and properly formatted
 - **Playlist not loading**: Verify the playlist URL is public and accessible
 - **Radio not working**: Some radio stations may be offline or have changed URLs
+- **Bot not responding**: Check if you're in the allowed users list (if `ALLOWED_USERS` is configured)
+- **State not saving**: Ensure the bot has write permissions in the project directory
+- **Reactions not working**: Make sure the bot has permission to add/remove reactions in the channel
 
 ## Deployment
 

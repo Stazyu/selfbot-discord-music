@@ -52,14 +52,25 @@ async function searchSong(query) {
 }
 
 function stream(url) {
+    const fs = require('fs')
+    const path = require('path')
 
-    const ytdlp = spawn(ytdlpExecutable, [
+    const ytdlpArgs = [
         "-f",
         "bestaudio",
         "-o",
-        "-",
-        url
-    ])
+        "-"
+    ]
+
+    // Add cookies file if it exists
+    const cookiesFile = path.join(__dirname, 'cookies.txt')
+    if (fs.existsSync(cookiesFile)) {
+        ytdlpArgs.push("--cookies", cookiesFile)
+    }
+
+    ytdlpArgs.push(url)
+
+    const ytdlp = spawn(ytdlpExecutable, ytdlpArgs)
 
     const ff = spawn(ffmpeg, [
         "-i",
