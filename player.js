@@ -37,7 +37,7 @@ function createPlayer(msg, voice) {
             this.player.play(resource)
 
             // createReactionUI(msg, queue)
-            this.text.send(`🎶 Playing **${song.title}**`)
+            this.text.send(`🎶 Playing **${song?.title || 'Unknown Song'}**`)
 
 
             this.player.once(AudioPlayerStatus.Idle, () => {
@@ -83,16 +83,16 @@ function createPlayer(msg, voice) {
 
         shuffle() {
             if (this.songs.length < 3) return; // Need at least 2 songs in queue (plus 1 playing)
-            
+
             // Extract all songs except the first one (currently playing)
             const playing = this.songs.shift();
-            
+
             // Fisher-Yates shuffle
             for (let i = this.songs.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [this.songs[i], this.songs[j]] = [this.songs[j], this.songs[i]];
             }
-            
+
             // Put the playing song back to front
             this.songs.unshift(playing);
         }

@@ -11,11 +11,11 @@ function buildNowPlaying(song) {
     return `
 🎶 **Now Playing**
 
-${song.title}
+${song?.title || 'Unknown Song'}
 
 ${progressBar(0.3)}
 
-00:30 / ${song.duration}
+00:30 / ${song?.duration || 'Unknown'}
 
 Controls
 ⏯ pause

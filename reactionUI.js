@@ -365,14 +365,16 @@ async function createCommandPanel(message, queue) {
                 // Queue info
                 let queueInfo = `📋 **Queue Info**\n\n`
                 if (queue.currentSong) {
-                    queueInfo += `🎵 Now Playing: **${queue.currentSong.title}**\n`
+                    queueInfo += `🎵 Now Playing: **${queue.currentSong?.title || 'Unknown Song'}**\n`
                 }
                 queueInfo += `🔊 Volume: **${Math.round((queue.volume ?? 1.0) * 100)}%**\n`
                 queueInfo += `📝 Songs in Queue: **${queue.songs.length}**\n`
                 if (queue.songs.length > 0) {
                     queueInfo += `\n📜 **Queue List:**\n`
                     queue.songs.slice(0, 10).forEach((song, i) => {
-                        queueInfo += `${i + 1}. ${song.title}\n`
+                        if (song && song.title) {
+                            queueInfo += `${i + 1}. ${song.title}\n`
+                        }
                     })
                     if (queue.songs.length > 10) {
                         queueInfo += `... and ${queue.songs.length - 10} more\n`
@@ -384,7 +386,9 @@ async function createCommandPanel(message, queue) {
                 if (queue.playHistory && queue.playHistory.length > 0) {
                     queueInfo += `\n🕐 **Recently Played:**\n`
                     queue.playHistory.slice(0, 5).forEach((song, i) => {
-                        queueInfo += `${i + 1}. ${song.title}\n`
+                        if (song && song.title) {
+                            queueInfo += `${i + 1}. ${song.title}\n`
+                        }
                     })
                 }
                 queue.textChannel.send(queueInfo)

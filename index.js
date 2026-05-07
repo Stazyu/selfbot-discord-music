@@ -1469,7 +1469,7 @@ client.on("messageCreate", async msg => {
                 // Show currently playing with duration and current time
                 if (queue.songs && queue.songs.length > 0 && !queue.radioStopped) {
                     const currentSong = queue.songs[0]
-                    let nowPlayingInfo = `🎶 **Now Playing:** ${currentSong.title}`
+                    let nowPlayingInfo = `🎶 **Now Playing:** ${currentSong?.title || 'Unknown Song'}`
 
                     // Add duration and current time if available
                     if (currentSong.duration) {
@@ -1501,7 +1501,7 @@ client.on("messageCreate", async msg => {
                 if (queue.songs && queue.songs.length > 0) {
                     stateMsg += `   🎵 **Songs in Queue:** ${queue.songs.length}\n`
                     queue.songs.slice(0, 5).forEach((song, index) => {
-                        stateMsg += `      ${index + 1}. ${song.title}\n`
+                        stateMsg += `      ${index + 1}. ${song?.title || 'Unknown Song'}\n`
                     })
                     if (queue.songs.length > 5) {
                         stateMsg += `      ... and ${queue.songs.length - 5} more\n`
@@ -1518,7 +1518,7 @@ client.on("messageCreate", async msg => {
                             hour: '2-digit',
                             minute: '2-digit'
                         })
-                        stateMsg += `      ${index + 1}. ${song.title} (${playTime})\n`
+                        stateMsg += `      ${index + 1}. ${song?.title || 'Unknown Song'} (${playTime})\n`
                     })
                 } else {
                     stateMsg += `   📜 **Recently Played:** None\n`
