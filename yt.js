@@ -26,12 +26,22 @@ async function searchSong(query) {
 
     console.log("Searching with yt-dlp:", searchQuery)
 
+    const fs = require('fs')
+    const path = require('path')
+
     return new Promise((resolve, reject) => {
         const ytdlpArgs = [
             "--dump-json",
-            "--no-playlist",
-            searchQuery
+            "--no-playlist"
         ]
+
+        // Add cookies file if it exists
+        const cookiesFile = path.join(__dirname, 'cookies.txt')
+        if (fs.existsSync(cookiesFile)) {
+            ytdlpArgs.push("--cookies", cookiesFile)
+        }
+
+        ytdlpArgs.push(searchQuery)
 
         const ytdlp = spawn(ytdlpExecutable, ytdlpArgs)
 
