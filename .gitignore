@@ -54,6 +54,9 @@ temp/
 yt-dlp
 yt-dlp.exe
 
+# YouTube cookies file (contains sensitive authentication data)
+cookies.txt
+
 state.json
 test-metadata.js
 test-url.txt
