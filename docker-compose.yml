@@ -15,4 +15,3 @@ services:
       - .env
     volumes:
       - ./data:/app/data
-      - ./cookies.txt:/app/cookies.txt
