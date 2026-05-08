@@ -648,14 +648,11 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
 
         if (isBrokenPipe) {
             console.log(`[radio] 🚨 Stream error detected: ${stderrOutput.trim()}`);
-            console.log('[radio] 🔄 Triggering automatic restart due to stream error...');
+            console.log('[radio] 🔄 Broken pipe detected, will trigger restart on process exit...');
 
-            // Force restart after a short delay to ensure proper cleanup
-            setTimeout(() => {
-                if (!ff.killed) {
-                    ff.kill('SIGTERM');
-                }
-            }, 1000);
+            // Don't kill here - let the close handler handle reconnection properly
+            // Just set a flag so close handler knows this was a broken pipe
+            ff._brokenPipeDetected = true;
         }
 
         // Skip the muxing overhead error message that appears when adding to recently played
@@ -972,11 +969,13 @@ async function playRadio(guild, radioUrl, radioName) {
 
     const codec = await detectStreamCodec(radioUrl)
     const ff = spawnRadioFfmpeg(radioUrl, codec, (code, signal) => {
-        // Check if this is an actual error that requires reconnection
-        const isError = (code !== 0 && code !== null && code !== 1 && signal !== 'SIGTERM' && signal !== 15)
+        // Check for broken pipe indicators in exit codes and stderr detection
+        const isBrokenPipe = ((code === 32 || code === 1) && signal === null) || ff._brokenPipeDetected
 
-        // Check for broken pipe indicators in exit codes
-        const isBrokenPipe = (code === 32 || code === 1) && signal === null
+        // Check if this is an actual error that requires reconnection
+        // Allow code 1 if it's a broken pipe, otherwise treat as error
+        const isError = (code !== 0 && code !== null && signal !== 'SIGTERM' && signal !== 15) &&
+            (!isBrokenPipe || code === 1)
 
         if (isError && !queue.radioStopped && !queue.isReconnecting) {
             const errorType = isBrokenPipe ? "broken pipe" : "stream error"
