@@ -329,7 +329,7 @@ client.on("voiceStateUpdate", (oldState, newState) => {
                 const elapsedSeconds = Math.floor((currentTime - startedAt) / 1000)
 
                 // Add resume time to the current song
-                if (queue.songs.length > 0) {
+                if (queue.songs && queue.songs.length > 0 && queue.songs[0]) {
                     queue.songs[0].resumeFrom = elapsedSeconds
                     console.log(`💾 Saved resume time: ${elapsedSeconds} seconds for "${queue.currentSong.title}"`)
                 }
@@ -784,7 +784,9 @@ function handleMusicStreamingError(guild, song, source) {
         queue.isMusicReconnecting = false
         queue.musicReconnectMessage = null
         queue.songs.shift()
-        playSong(guild, queue.songs[0])
+        if (queue.songs.length > 0) {
+            playSong(guild, queue.songs[0])
+        }
         return
     }
 
