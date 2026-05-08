@@ -44,7 +44,7 @@ function startRadioMetadataDetection(radioUrl, queue) {
         }
 
         // Use faster settings for initial detection, slower for intervals
-        const timeout = isInitial ? 5000 : 10000;
+        const timeout = isInitial ? 10000 : 15000;
 
         const ff = spawn(ffmpeg, [
             '-nostats',
@@ -91,6 +91,8 @@ function startRadioMetadataDetection(radioUrl, queue) {
         ff.on('close', (code) => {
             if (queue.radioStopped || isKilled) return;
 
+            console.log(`[radio] FFmpeg closed. streamTitle: ${streamTitle}, currentSong: ${currentSong}`);
+
             if (streamTitle) {
                 console.log(`[radio] StreamTitle found: ${streamTitle}`);
             } else {
@@ -98,6 +100,7 @@ function startRadioMetadataDetection(radioUrl, queue) {
             }
 
             if (streamTitle && streamTitle !== currentSong) {
+                console.log(`[radio] New song detected, will update message`);
                 // Skip error messages and invalid content
                 if (streamTitle.includes('0kB other streams:0kB global headers:0kB muxing overhead: unknown') ||
                     streamTitle.includes('ffmpeg') ||
