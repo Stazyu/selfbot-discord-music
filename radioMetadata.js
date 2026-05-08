@@ -4,8 +4,6 @@ const { spawn } = require("child_process")
 const ffmpeg = process.platform === "win32" ? require("ffmpeg-static") : "ffmpeg"
 
 // Function to detect current song from radio stream metadata using FFmpeg
-const { spawn } = require('child_process');
-
 function startRadioMetadataDetection(radioUrl, queue) {
     let currentSong = null;
     let ffProcess = null;
