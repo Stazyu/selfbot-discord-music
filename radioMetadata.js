@@ -56,54 +56,60 @@ function startRadioMetadataDetection(radioUrl, queue) {
             '-'
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
-        let stderr = '';
         let isKilled = false;
+        let metadataInfo = {
+            genre: null,
+            bitrate: null
+        };
+        let streamTitle = null;
 
         ff.stderr.on('data', (data) => {
-            stderr += data.toString();
+            const output = data.toString();
+
+            // Extract icy-genre
+            const genreMatch = output.match(/icy-genre\s*:\s*(.+)/i);
+            if (genreMatch) {
+                metadataInfo.genre = genreMatch[1].trim();
+                console.log("🎵 Genre:", metadataInfo.genre);
+            }
+
+            // Extract icy-br (bitrate)
+            const bitrateMatch = output.match(/icy-br\s*:\s*(.+)/i);
+            if (bitrateMatch) {
+                metadataInfo.bitrate = bitrateMatch[1].trim();
+                console.log("🔊 Bitrate:", metadataInfo.bitrate);
+            }
+
+            // Extract StreamTitle
+            const streamTitleMatch = output.match(/StreamTitle\s*:\s*(.+)/i);
+            if (streamTitleMatch) {
+                streamTitle = streamTitleMatch[1].trim();
+                console.log("🎶 Now Playing:", streamTitle);
+            }
         });
 
         ff.on('close', (code) => {
             if (queue.radioStopped || isKilled) return;
 
-            // Extract ICY metadata information
-            const metadataMatch = stderr.match(/StreamTitle\s*:\s*(.+)/i);
-            const icyGenre = stderr.match(/icy-genre\s*:\s*(.+)/i);
-            const icyBr = stderr.match(/icy-br\s*:\s*(.+)/i);
-            const icySr = stderr.match(/icy-sr\s*:\s*(.+)/i);
-            const icyUrl = stderr.match(/icy-url\s*:\s*(.+)/i);
-
-            let songTitle = null;
-            let metadataInfo = {
-                genre: icyGenre ? icyGenre[1].trim() : null,
-                bitrate: icyBr ? icyBr[1].trim() : null,
-                sampleRate: icySr ? icySr[1].trim() : null,
-                url: icyUrl ? icyUrl[1].trim() : null
-            };
-
-            // Extract song title from metadata patterns
-            if (metadataMatch) {
-                songTitle = metadataMatch[1].trim();
-                console.log(`[radio] StreamTitle found: ${songTitle}`);
-                if (metadataInfo.genre) console.log(`[radio] Genre: ${metadataInfo.genre}`);
-                if (metadataInfo.bitrate) console.log(`[radio] Bitrate: ${metadataInfo.bitrate} kbps`);
+            if (streamTitle) {
+                console.log(`[radio] StreamTitle found: ${streamTitle}`);
             } else {
                 console.log(`[radio] No StreamTitle detected`);
             }
 
-            if (songTitle && songTitle !== currentSong) {
+            if (streamTitle && streamTitle !== currentSong) {
                 // Skip error messages and invalid content
-                if (songTitle.includes('0kB other streams:0kB global headers:0kB muxing overhead: unknown') ||
-                    songTitle.includes('ffmpeg') ||
-                    songTitle.includes('error') ||
-                    songTitle.includes('Input') ||
-                    songTitle.includes('Output') ||
-                    songTitle.length < 3) {
-                    console.log(`[radio] Skipping invalid content: ${songTitle}`);
+                if (streamTitle.includes('0kB other streams:0kB global headers:0kB muxing overhead: unknown') ||
+                    streamTitle.includes('ffmpeg') ||
+                    streamTitle.includes('error') ||
+                    streamTitle.includes('Input') ||
+                    streamTitle.includes('Output') ||
+                    streamTitle.length < 3) {
+                    console.log(`[radio] Skipping invalid content: ${streamTitle}`);
                     return;
                 }
 
-                currentSong = songTitle;
+                currentSong = streamTitle;
                 lastSuccessfulDetection = Date.now();
                 consecutiveErrors = 0; // Reset error counter on success
                 console.log(`[radio] Detected song: ${currentSong}`);
@@ -113,7 +119,7 @@ function startRadioMetadataDetection(radioUrl, queue) {
                     queue.playHistory = []
                 }
                 queue.playHistory.unshift({
-                    title: `${songTitle} (Radio)`,
+                    title: `${streamTitle} (Radio)`,
                     url: queue.radioUrl,
                     playedAt: new Date().toISOString(),
                     isRadio: true
@@ -184,7 +190,7 @@ function startRadioMetadataDetection(radioUrl, queue) {
         }, timeout);
 
         // Clean up timeout when process closes
-        ff.on('close', () => {
+        ff.once('close', () => {
             clearTimeout(killTimeout);
         });
     }
@@ -192,9 +198,9 @@ function startRadioMetadataDetection(radioUrl, queue) {
     // Try to detect metadata immediately (faster initial detection)
     console.log('[radio] Starting initial metadata detection (fast mode)');
     detectMetadata(true);
-    // Then check every 5 seconds for updates (slower but more thorough)
-    console.log('[radio] Setting up metadata detection interval: 20000ms');
-    metadataInterval = setInterval(() => detectMetadata(false), 20000);
+    // Then check every 10 seconds for updates (slower but more thorough)
+    console.log('[radio] Setting up metadata detection interval: 10000ms');
+    metadataInterval = setInterval(() => detectMetadata(false), 10000);
     console.log('[radio] Metadata detection interval started');
 
     return {
