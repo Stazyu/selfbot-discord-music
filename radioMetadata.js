@@ -43,9 +43,6 @@ function startRadioMetadataDetection(radioUrl, queue) {
             consecutiveErrors = MAX_CONSECUTIVE_ERRORS; // Force restart
         }
 
-        // Use faster settings for initial detection, slower for intervals
-        const timeout = isInitial ? 10000 : 15000;
-
         const ff = spawn(ffmpeg, [
             '-nostats',
             '-hide_banner',
@@ -56,12 +53,10 @@ function startRadioMetadataDetection(radioUrl, queue) {
             '-'
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
-        let isKilled = false;
         let metadataInfo = {
             genre: null,
             bitrate: null
         };
-        let streamTitle = null;
 
         ff.stderr.on('data', (data) => {
             const output = data.toString();
@@ -83,141 +78,99 @@ function startRadioMetadataDetection(radioUrl, queue) {
             // Extract StreamTitle
             const streamTitleMatch = output.match(/StreamTitle\s*:\s*(.+)/i);
             if (streamTitleMatch) {
-                streamTitle = streamTitleMatch[1].trim();
-                console.log("🎶 Now Playing:", streamTitle);
+                const newStreamTitle = streamTitleMatch[1].trim();
+                console.log("🎶 Now Playing:", newStreamTitle);
+
+                // Update message immediately when new song is detected
+                if (newStreamTitle && newStreamTitle !== currentSong) {
+                    // Skip error messages and invalid content
+                    if (newStreamTitle.includes('0kB other streams:0kB global headers:0kB muxing overhead: unknown') ||
+                        newStreamTitle.includes('ffmpeg') ||
+                        newStreamTitle.includes('error') ||
+                        newStreamTitle.includes('Input') ||
+                        newStreamTitle.includes('Output') ||
+                        newStreamTitle.length < 3) {
+                        console.log(`[radio] Skipping invalid content: ${newStreamTitle}`);
+                        return;
+                    }
+
+                    currentSong = newStreamTitle;
+                    lastSuccessfulDetection = Date.now();
+                    consecutiveErrors = 0;
+                    console.log(`[radio] Detected song: ${currentSong}`);
+
+                    // Add to play history
+                    if (!queue.playHistory) {
+                        queue.playHistory = []
+                    }
+                    queue.playHistory.unshift({
+                        title: `${currentSong} (Radio)`,
+                        url: queue.radioUrl,
+                        playedAt: new Date().toISOString(),
+                        isRadio: true
+                    })
+                    if (queue.playHistory.length > 10) {
+                        queue.playHistory = queue.playHistory.slice(0, 10)
+                    }
+
+                    // Update the radio message with current song info and metadata
+                    if (queue.radioMessage) {
+                        console.log(`[radio] Updating message with current song: ${currentSong}`);
+
+                        let messageText = `📻 Now playing radio: **${queue.radioName}**\n🎵 Now playing: **${currentSong}**`;
+
+                        if (metadataInfo.genre || metadataInfo.bitrate) {
+                            const metadataParts = [];
+                            if (metadataInfo.genre) metadataParts.push(`Genre: ${metadataInfo.genre}`);
+                            if (metadataInfo.bitrate) metadataParts.push(`Bitrate: ${metadataInfo.bitrate}kbps`);
+                            messageText += `\n📊 ${metadataParts.join(' • ')}`;
+                        }
+
+                        queue.radioMessage.edit(messageText)
+                            .then(() => {
+                                console.log(`[radio] Successfully updated radio message`);
+                            })
+                            .catch(err => {
+                                console.error(`[radio] Failed to update radio message:`, err);
+                            });
+                    }
+                }
             }
         });
 
         ff.on('close', (code) => {
-            if (queue.radioStopped || isKilled) return;
-
-            console.log(`[radio] FFmpeg closed. streamTitle: ${streamTitle}, currentSong: ${currentSong}`);
-
-            if (streamTitle) {
-                console.log(`[radio] StreamTitle found: ${streamTitle}`);
-            } else {
-                console.log(`[radio] No StreamTitle detected`);
-            }
-
-            if (streamTitle && streamTitle !== currentSong) {
-                console.log(`[radio] New song detected, will update message`);
-                // Skip error messages and invalid content
-                if (streamTitle.includes('0kB other streams:0kB global headers:0kB muxing overhead: unknown') ||
-                    streamTitle.includes('ffmpeg') ||
-                    streamTitle.includes('error') ||
-                    streamTitle.includes('Input') ||
-                    streamTitle.includes('Output') ||
-                    streamTitle.length < 3) {
-                    console.log(`[radio] Skipping invalid content: ${streamTitle}`);
-                    return;
-                }
-
-                currentSong = streamTitle;
-                lastSuccessfulDetection = Date.now();
-                consecutiveErrors = 0; // Reset error counter on success
-                console.log(`[radio] Detected song: ${currentSong}`);
-
-                // Add to play history
-                if (!queue.playHistory) {
-                    queue.playHistory = []
-                }
-                queue.playHistory.unshift({
-                    title: `${streamTitle} (Radio)`,
-                    url: queue.radioUrl,
-                    playedAt: new Date().toISOString(),
-                    isRadio: true
-                })
-                // Keep only last 10 songs in history
-                if (queue.playHistory.length > 10) {
-                    queue.playHistory = queue.playHistory.slice(0, 10)
-                }
-
-                // Update the radio message with current song info and metadata
-                if (queue.radioMessage) {
-                    console.log(`[radio] Updating message with current song: ${currentSong}`);
-
-                    let messageText = `📻 Now playing radio: **${queue.radioName}**\n🎵 Now playing: **${currentSong}**`;
-
-                    // Add genre and bitrate info if available
-                    if (metadataInfo.genre || metadataInfo.bitrate) {
-                        const metadataParts = [];
-                        if (metadataInfo.genre) metadataParts.push(`Genre: ${metadataInfo.genre}`);
-                        if (metadataInfo.bitrate) metadataParts.push(`Bitrate: ${metadataInfo.bitrate}kbps`);
-                        messageText += `\n📊 ${metadataParts.join(' • ')}`;
-                    }
-
-                    queue.radioMessage.edit(messageText)
-                        .then(() => {
-                            console.log(`[radio] Successfully updated radio message`);
-                        })
-                        .catch(err => {
-                            console.error(`[radio] Failed to update radio message:`, err);
-                        });
-                } else {
-                    console.log(`[radio] No radio message available to update`);
-                }
-            } else {
-                // No metadata detected, but process closed normally
-                console.log('[radio] No metadata detected in this cycle');
-            }
+            if (queue.radioStopped) return;
+            console.log(`[radio] FFmpeg closed with code: ${code}`);
         });
 
         ff.on('error', (err) => {
             console.log('[radio] Metadata detection error:', err.message);
-            consecutiveErrors++;
 
-            // If too many consecutive errors, restart the metadata detection
-            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-                console.log(`[radio] Too many consecutive errors (${consecutiveErrors}), restarting metadata detection in ${ERROR_RESTART_DELAY / 1000} seconds...`);
-
-                if (metadataInterval) {
-                    clearInterval(metadataInterval);
-                    metadataInterval = null;
-                }
-
+            // Restart FFmpeg if error occurs
+            if (!queue.radioStopped) {
                 setTimeout(() => {
                     if (!queue.radioStopped) {
-                        consecutiveErrors = 0; // Reset error counter
-                        lastSuccessfulDetection = Date.now(); // Reset timestamp
-                        metadataInterval = setInterval(detectMetadata, 10000);
-                        console.log('[radio] Metadata detection restarted');
+                        console.log('[radio] Restarting FFmpeg after error...');
+                        detectMetadata(false);
                     }
-                }, ERROR_RESTART_DELAY);
+                }, 5000);
             }
-        });
-
-        // Kill FFmpeg after timeout (faster for initial detection)
-        const killTimeout = setTimeout(() => {
-            isKilled = true;
-            ff.kill('SIGKILL'); // Force kill
-        }, timeout);
-
-        // Clean up timeout when process closes
-        ff.once('close', () => {
-            clearTimeout(killTimeout);
         });
     }
 
-    // Try to detect metadata immediately (faster initial detection)
-    console.log('[radio] Starting initial metadata detection (fast mode)');
+    // Start metadata detection (real-time updates via stderr)
+    console.log('[radio] Starting metadata detection (real-time mode)');
     detectMetadata(true);
-    // Then check every 10 seconds for updates (slower but more thorough)
-    console.log('[radio] Setting up metadata detection interval: 10000ms');
-    metadataInterval = setInterval(() => detectMetadata(false), 10000);
-    console.log('[radio] Metadata detection interval started');
 
     return {
         stop: () => {
-            if (metadataInterval) {
-                clearInterval(metadataInterval);
-                metadataInterval = null;
-            }
+            console.log('[radio] Metadata detection stopped');
         },
         getStatus: () => ({
             currentSong,
             lastSuccessfulDetection,
             consecutiveErrors,
-            isRunning: !!metadataInterval
+            isRunning: true
         })
     };
 }
