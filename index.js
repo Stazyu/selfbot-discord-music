@@ -1009,10 +1009,15 @@ async function playRadio(guild, radioUrl, radioName) {
             // Use shorter delay for broken pipe to recover faster
             const delay = isBrokenPipe ? 1500 : 3000
             const reconnectMsg = isBrokenPipe ?
-                `🔄 Radio stream terputus (broken pipe), mencoba reconnect (${queue.radioReconnectAttempts}/${maxAttempts})...` :
-                `🔄 Radio stream terputus, mencoba reconnect (${queue.radioReconnectAttempts}/${maxAttempts})...`
+                `� Now playing radio: **${radioName}** (Reconnecting ${queue.radioReconnectAttempts}/${maxAttempts}...)` :
+                `� Now playing radio: **${radioName}** (Reconnecting ${queue.radioReconnectAttempts}/${maxAttempts}...)`
 
-            queue.textChannel.send(reconnectMsg)
+            // Edit existing radio message instead of sending new one
+            if (queue.radioMessage) {
+                queue.radioMessage.edit(reconnectMsg).catch(console.error)
+            } else {
+                queue.textChannel.send(reconnectMsg)
+            }
 
             setTimeout(() => {
                 const currentQueue = queues.get(guild.id)
