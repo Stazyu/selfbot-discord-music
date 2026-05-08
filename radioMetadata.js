@@ -44,18 +44,16 @@ function startRadioMetadataDetection(radioUrl, queue) {
         }
 
         // Use faster settings for initial detection, slower for intervals
-        const timeout = isInitial ? 5000 : 8000;
-        const analyzeDuration = isInitial ? 5000000 : 10000000;
-        const probeSize = isInitial ? 5000000 : 50000000;
+        const timeout = isInitial ? 5000 : 10000;
 
         const ff = spawn(ffmpeg, [
-            '-analyzeduration', analyzeDuration.toString(),
-            '-probesize', probeSize.toString(),
+            '-nostats',
+            '-hide_banner',
+            '-loglevel', 'info',
+            '-icy', '1',
             '-i', radioUrl,
             '-f', 'null',
-            '-',
-            '-metadata', 'title=',
-            '-metadata', 'artist='
+            '-'
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
         let stderr = '';
@@ -68,59 +66,29 @@ function startRadioMetadataDetection(radioUrl, queue) {
         ff.on('close', (code) => {
             if (queue.radioStopped || isKilled) return;
 
-            // Try to extract song title from FFmpeg output with multiple patterns
-            const metadataMatch = stderr.match(/StreamTitle='([^']+)'/i);
-            const titleMatch = stderr.match(/title\s*:\s*(.+)/i);
-            const artistMatch = stderr.match(/artist\s*:\s*(.+)/i);
-            const icyMatch = stderr.match(/icy-name\s*:\s*(.+)/i);
-            const titleArtistMatch = stderr.match(/(.+?)\s*-\s*(.+)/i);
+            // Extract ICY metadata information
+            const metadataMatch = stderr.match(/StreamTitle\s*:\s*(.+)/i);
+            const icyGenre = stderr.match(/icy-genre\s*:\s*(.+)/i);
+            const icyBr = stderr.match(/icy-br\s*:\s*(.+)/i);
+            const icySr = stderr.match(/icy-sr\s*:\s*(.+)/i);
+            const icyUrl = stderr.match(/icy-url\s*:\s*(.+)/i);
 
             let songTitle = null;
+            let metadataInfo = {
+                genre: icyGenre ? icyGenre[1].trim() : null,
+                bitrate: icyBr ? icyBr[1].trim() : null,
+                sampleRate: icySr ? icySr[1].trim() : null,
+                url: icyUrl ? icyUrl[1].trim() : null
+            };
 
-            // Try different metadata extraction patterns
+            // Extract song title from metadata patterns
             if (metadataMatch) {
-                songTitle = metadataMatch[1];
-                console.log(`[radio] Metadata found via StreamTitle: ${songTitle}`);
-            } else if (titleMatch && artistMatch) {
-                songTitle = `${artistMatch[1]} - ${titleMatch[1]}`;
-                console.log(`[radio] Metadata found via title/artist: ${songTitle}`);
-            } else if (titleMatch) {
-                songTitle = titleMatch[1];
-                console.log(`[radio] Metadata found via title only: ${songTitle}`);
-            } else if (icyMatch) {
-                // Check if icy-name contains song info or just station name
-                const icyName = icyMatch[1];
-                // Skip if it looks like a station name (contains radio station keywords)
-                // But allow if it contains song-like patterns (artist - title format)
-                if (icyName.match(/FM|RADIO|STATION/i)) {
-                    // Check if it might be a song with station-like words
-                    if (icyName.match(/ - | – | ft\.|feat\./i)) {
-                        // Likely a song title with station-like words
-                        songTitle = icyName;
-                        console.log(`[radio] Metadata found via icy-name (song with station words): ${songTitle}`);
-                    } else {
-                        console.log(`[radio] Skipping station name from icy-name: ${icyName}`);
-                    }
-                } else if (icyName.match(/PRAMBORS|RRI|ELSHINTA|TRAX|GEN|ARDAN|SMART|PAS|MARA/i)) {
-                    // Skip specific Indonesian station names
-                    console.log(`[radio] Skipping Indonesian station name from icy-name: ${icyName}`);
-                } else if (icyName.length < 3) {
-                    // Skip if too short (likely not a song title)
-                    console.log(`[radio] Skipping too short title from icy-name: ${icyName}`);
-                } else if (icyName.match(/^[0-9\s\.\-]+$/)) {
-                    // Skip if only numbers/symbols (likely frequency)
-                    console.log(`[radio] Skipping frequency from icy-name: ${icyName}`);
-                } else {
-                    songTitle = icyName;
-                    console.log(`[radio] Metadata found via icy-name: ${songTitle}`);
-                }
-            } else if (titleArtistMatch) {
-                songTitle = titleArtistMatch[0];
-                console.log(`[radio] Metadata found via title-artist pattern: ${songTitle}`);
+                songTitle = metadataMatch[1].trim();
+                console.log(`[radio] StreamTitle found: ${songTitle}`);
+                if (metadataInfo.genre) console.log(`[radio] Genre: ${metadataInfo.genre}`);
+                if (metadataInfo.bitrate) console.log(`[radio] Bitrate: ${metadataInfo.bitrate} kbps`);
             } else {
-                console.log(`[radio] No metadata patterns matched in stderr output`);
-                // Log a sample of stderr for debugging (first 500 chars)
-                console.log(`[radio] stderr sample: ${stderr.substring(0, 500)}...`);
+                console.log(`[radio] No StreamTitle detected`);
             }
 
             if (songTitle && songTitle !== currentSong) {
@@ -155,10 +123,21 @@ function startRadioMetadataDetection(radioUrl, queue) {
                     queue.playHistory = queue.playHistory.slice(0, 10)
                 }
 
-                // Update the radio message with current song info
+                // Update the radio message with current song info and metadata
                 if (queue.radioMessage) {
                     console.log(`[radio] Updating message with current song: ${currentSong}`);
-                    queue.radioMessage.edit(`📻 Now playing radio: **${queue.radioName}**\n🎵 Now playing: **${currentSong}**`)
+
+                    let messageText = `📻 Now playing radio: **${queue.radioName}**\n🎵 Now playing: **${currentSong}**`;
+
+                    // Add genre and bitrate info if available
+                    if (metadataInfo.genre || metadataInfo.bitrate) {
+                        const metadataParts = [];
+                        if (metadataInfo.genre) metadataParts.push(`Genre: ${metadataInfo.genre}`);
+                        if (metadataInfo.bitrate) metadataParts.push(`Bitrate: ${metadataInfo.bitrate}kbps`);
+                        messageText += `\n📊 ${metadataParts.join(' • ')}`;
+                    }
+
+                    queue.radioMessage.edit(messageText)
                         .then(() => {
                             console.log(`[radio] Successfully updated radio message`);
                         })
