@@ -10,14 +10,10 @@ function startRadioMetadataDetection(radioUrl, queue) {
     let consecutiveErrors = 0;
 
     function poll(targetUrl = radioUrl, redirectCount = 0) {
-        // Hentikan jika radio sudah di-stop
         if (queue.radioStopped) return;
-
-        // Cegah eksekusi bertumpuk
         if (isPolling && redirectCount === 0) return;
         if (redirectCount === 0) isPolling = true;
 
-        // Cegah Infinite Redirect Loop
         if (redirectCount > 5) {
             console.error(`[radio-http] Gagal: Terlalu banyak redirect`);
             isPolling = false;
@@ -35,47 +31,90 @@ function startRadioMetadataDetection(radioUrl, queue) {
                 return;
             }
 
-            // 1. TANGANI REDIRECT (301, 302, 307, 308)
+            // 1. TANGANI REDIRECT & ERROR
             if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                console.log(`[radio-http] 🔀 Redirecting ke: ${res.headers.location}`);
                 res.destroy();
                 return poll(res.headers.location, redirectCount + 1);
             }
-
-            // 2. TANGANI ERROR SERVER
             if (res.statusCode >= 400) {
-                console.error(`[radio-http] ❌ Server Error Status: ${res.statusCode}`);
                 res.destroy();
                 isPolling = false;
                 consecutiveErrors++;
                 return;
             }
 
-            // 3. AMBIL METADATA HEADER (Statis)
+            // 2. AMBIL HEADER METADATA (TERUTAMA META-INT)
             const metadataInfo = {
                 genre: res.headers['icy-genre'] ? res.headers['icy-genre'].trim() : null,
                 bitrate: res.headers['icy-br'] ? res.headers['icy-br'].trim() : null
             };
 
-            let buffer = '';
+            const metaint = parseInt(res.headers['icy-metaint'], 10);
 
-            // 4. BACA STREAM UNTUK MENCARI JUDUL LAGU
+            // Jika server tidak mengirimkan icy-metaint, berarti radio ini tidak mendukung metadata stream
+            if (isNaN(metaint)) {
+                console.error('[radio-http] Server radio tidak mengirimkan icy-metaint (Tidak ada metadata).');
+                res.destroy();
+                isPolling = false;
+                return;
+            }
+
+            // 3. ICECAST PROTOCOL DECODER MURNI
+            let audioRead = 0;
+            let metaLength = 0;
+            let metaBuffer = '';
+            let isReadingMeta = false;
+            let emptyMetaBlocks = 0; // Penghitung jika dj/radio sedang tidak menyetel judul
+
             res.on('data', (chunk) => {
-                buffer += chunk.toString('latin1');
+                // Proses data byte per byte
+                for (let i = 0; i < chunk.length; i++) {
+                    if (!isReadingMeta) {
+                        audioRead++;
+                        // Jika kita sudah membaca audio sebanyak batas 'metaint', blok selanjutnya adalah metadata
+                        if (audioRead === metaint) {
+                            isReadingMeta = true;
+                            audioRead = 0;
+                            metaLength = -1; // Tandai untuk membaca panjang teks
+                        }
+                    } else {
+                        if (metaLength === -1) {
+                            // Sesuai protokol: byte pertama metadata dikali 16 adalah panjang teksnya
+                            metaLength = chunk[i] * 16;
+                            metaBuffer = '';
+                            if (metaLength === 0) {
+                                isReadingMeta = false; // Blok ini kosong
+                            }
+                        } else {
+                            // Baca huruf demi huruf
+                            metaBuffer += String.fromCharCode(chunk[i]);
 
-                const match = buffer.match(/StreamTitle=['"](.*?)['"];/i);
+                            // Jika panjang teks sudah terpenuhi
+                            if (metaBuffer.length === metaLength) {
+                                isReadingMeta = false;
 
-                if (match) {
-                    const newStreamTitle = match[1].trim();
-                    handleNewSong(newStreamTitle, metadataInfo);
+                                // Cari judul lagu di dalam teks bersih
+                                const match = metaBuffer.match(/StreamTitle=['"](.*?)['"]/i);
 
-                    // LANGSUNG PUTUS KONEKSI SETELAH DAPAT JUDUL (Hemat RAM/CPU)
-                    res.destroy();
-                }
+                                if (match && match[1]) {
+                                    const newStreamTitle = match[1].trim();
+                                    handleNewSong(newStreamTitle, metadataInfo);
 
-                // Putus paksa jika data > 200KB tidak ada judul (agar tidak bocor memori)
-                if (buffer.length > 200000) {
-                    res.destroy();
+                                    // BERHASIL! Langsung hancurkan koneksi untuk hemat RAM/CPU
+                                    res.destroy();
+                                    return; // Keluar dari loop for
+                                } else {
+                                    // Judul kosong di blok ini
+                                    emptyMetaBlocks++;
+                                    // Jika sudah 3x cek dan tetap tidak ada judul, putus koneksi agar tidak hang
+                                    if (emptyMetaBlocks > 3) {
+                                        res.destroy();
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             });
 
@@ -84,17 +123,13 @@ function startRadioMetadataDetection(radioUrl, queue) {
             });
         });
 
-        // 5. PENANGANAN ERROR JARINGAN
         req.on('error', (err) => {
             isPolling = false;
-            // Abaikan error ECONNRESET karena itu hasil dari res.destroy() kita sendiri
             if (err.code !== 'ECONNRESET') {
-                console.error('[radio-http] Request error:', err.message);
                 consecutiveErrors++;
             }
         });
 
-        // 6. TIMEOUT JIKA SERVER RADIO MENGGANTUNG
         req.setTimeout(5000, () => {
             req.destroy();
             isPolling = false;
