@@ -1,110 +1,116 @@
-const { spawn } = require("child_process")
-
-// Use system ffmpeg on Linux, ffmpeg-static on Windows
-const ffmpeg = process.platform === "win32" ? require("ffmpeg-static") : "ffmpeg"
-
 // Function to detect current song from radio stream metadata using FFmpeg
+const http = require('http');
+const https = require('https');
+
 function startRadioMetadataDetection(radioUrl, queue) {
     let currentSong = null;
-    let ffProcess = null;
-    let restartTimeout = null;
+    let metadataInterval = null;
+    let isPolling = false;
     let lastSuccessfulDetection = Date.now();
     let consecutiveErrors = 0;
-    const MAX_CONSECUTIVE_ERRORS = 3;
 
-    function startFfmpegStream() {
-        if (queue.radioStopped) {
-            console.log('[radio] Radio stopped, halting metadata detection.');
+    function poll(targetUrl = radioUrl, redirectCount = 0) {
+        // Hentikan jika radio sudah di-stop
+        if (queue.radioStopped) return;
+
+        // Cegah eksekusi bertumpuk
+        if (isPolling && redirectCount === 0) return;
+        if (redirectCount === 0) isPolling = true;
+
+        // Cegah Infinite Redirect Loop
+        if (redirectCount > 5) {
+            console.error(`[radio-http] Gagal: Terlalu banyak redirect`);
+            isPolling = false;
             return;
         }
 
-        console.log('[radio] Starting/Restarting FFmpeg metadata listener...');
+        const client = targetUrl.startsWith('https') ? https : http;
 
-        // Bunuh process lama jika masih ada (mencegah leak)
-        if (ffProcess && !ffProcess.killed) {
-            ffProcess.kill('SIGKILL');
-        }
+        const req = client.get(targetUrl, {
+            headers: { 'Icy-MetaData': '1' }
+        }, (res) => {
+            if (queue.radioStopped) {
+                res.destroy();
+                isPolling = false;
+                return;
+            }
 
-        ffProcess = spawn('ffmpeg', [
-            '-nostats',
-            '-hide_banner',
-            '-loglevel', 'info',
-            '-icy', '1',
-            '-i', radioUrl,
-            '-f', 'null',
-            '-'
-        ], { stdio: ['ignore', 'pipe', 'pipe'] });
+            // 1. TANGANI REDIRECT (301, 302, 307, 308)
+            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                console.log(`[radio-http] 🔀 Redirecting ke: ${res.headers.location}`);
+                res.destroy();
+                return poll(res.headers.location, redirectCount + 1);
+            }
 
-        let metadataInfo = { genre: null, bitrate: null };
-        let outputBuffer = ''; // Buffer untuk mencegah chunk terpotong
+            // 2. TANGANI ERROR SERVER
+            if (res.statusCode >= 400) {
+                console.error(`[radio-http] ❌ Server Error Status: ${res.statusCode}`);
+                res.destroy();
+                isPolling = false;
+                consecutiveErrors++;
+                return;
+            }
 
-        ffProcess.stderr.on('data', (data) => {
-            outputBuffer += data.toString();
+            // 3. AMBIL METADATA HEADER (Statis)
+            const metadataInfo = {
+                genre: res.headers['icy-genre'] ? res.headers['icy-genre'].trim() : null,
+                bitrate: res.headers['icy-br'] ? res.headers['icy-br'].trim() : null
+            };
 
-            // Proses per baris (\n atau \r)
-            let lines = outputBuffer.split(/\r?\n/);
+            let buffer = '';
 
-            // Simpan elemen terakhir (yang mungkin belum lengkap) kembali ke buffer
-            outputBuffer = lines.pop();
+            // 4. BACA STREAM UNTUK MENCARI JUDUL LAGU
+            res.on('data', (chunk) => {
+                buffer += chunk.toString('latin1');
 
-            for (const line of lines) {
-                // Ekstrak Genre
-                const genreMatch = line.match(/icy-genre\s*:\s*(.+)/i);
-                if (genreMatch) metadataInfo.genre = genreMatch[1].trim();
+                const match = buffer.match(/StreamTitle=['"](.*?)['"];/i);
 
-                // Ekstrak Bitrate
-                const bitrateMatch = line.match(/icy-br\s*:\s*(.+)/i);
-                if (bitrateMatch) metadataInfo.bitrate = bitrateMatch[1].trim();
-
-                // Ekstrak StreamTitle (Lagu yang sedang diputar)
-                const streamTitleMatch = line.match(/StreamTitle\s*:\s*(.+)/i);
-                if (streamTitleMatch) {
-                    const newStreamTitle = streamTitleMatch[1].trim();
+                if (match) {
+                    const newStreamTitle = match[1].trim();
                     handleNewSong(newStreamTitle, metadataInfo);
+
+                    // LANGSUNG PUTUS KONEKSI SETELAH DAPAT JUDUL (Hemat RAM/CPU)
+                    res.destroy();
                 }
+
+                // Putus paksa jika data > 200KB tidak ada judul (agar tidak bocor memori)
+                if (buffer.length > 200000) {
+                    res.destroy();
+                }
+            });
+
+            res.on('close', () => {
+                isPolling = false;
+            });
+        });
+
+        // 5. PENANGANAN ERROR JARINGAN
+        req.on('error', (err) => {
+            isPolling = false;
+            // Abaikan error ECONNRESET karena itu hasil dari res.destroy() kita sendiri
+            if (err.code !== 'ECONNRESET') {
+                console.error('[radio-http] Request error:', err.message);
+                consecutiveErrors++;
             }
         });
 
-        ffProcess.on('close', (code) => {
-            if (queue.radioStopped) return;
-            console.log(`[radio] FFmpeg listener closed with code: ${code}. Restarting in 5s...`);
-            scheduleRestart();
+        // 6. TIMEOUT JIKA SERVER RADIO MENGGANTUNG
+        req.setTimeout(5000, () => {
+            req.destroy();
+            isPolling = false;
         });
-
-        ffProcess.on('error', (err) => {
-            if (queue.radioStopped) return;
-            console.error('[radio] FFmpeg error:', err.message);
-            consecutiveErrors++;
-
-            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-                console.error('[radio] Max consecutive errors reached. Pausing detection longer.');
-                scheduleRestart(30000); // Tunggu 30 detik jika error beruntun
-            } else {
-                scheduleRestart(5000);
-            }
-        });
-    }
-
-    function scheduleRestart(delay = 5000) {
-        if (restartTimeout) clearTimeout(restartTimeout);
-        restartTimeout = setTimeout(() => {
-            startFfmpegStream();
-        }, delay);
     }
 
     function handleNewSong(newStreamTitle, metadataInfo) {
-        // Filter sampah dari output ffmpeg
-        const isInvalid = ['0kB other streams', 'ffmpeg', 'error', 'Input', 'Output']
-            .some(keyword => newStreamTitle.includes(keyword));
+        // Abaikan jika judul kosong atau tidak berubah
+        if (!newStreamTitle || newStreamTitle.length < 3 || newStreamTitle === currentSong) return;
 
-        if (isInvalid || newStreamTitle.length < 3 || newStreamTitle === currentSong) return;
-
-        console.log(`[radio] 🎶 Detected new song: ${newStreamTitle}`);
+        console.log(`[radio-http] 🎶 Detected new song: ${newStreamTitle}`);
         currentSong = newStreamTitle;
         lastSuccessfulDetection = Date.now();
-        consecutiveErrors = 0; // Reset error counter
+        consecutiveErrors = 0; // Reset counter error
 
-        // 1. Update History
+        // 1. Update Play History
         if (!queue.playHistory) queue.playHistory = [];
         queue.playHistory.unshift({
             title: `${currentSong} (Radio)`,
@@ -127,26 +133,34 @@ function startRadioMetadataDetection(radioUrl, queue) {
             }
 
             queue.radioMessage.edit(messageText).catch(err => {
-                console.error(`[radio] Failed to update radio message:`, err.message);
+                console.error(`[radio-http] Failed to update radio message:`, err.message);
             });
         }
     }
 
     // --- Inisialisasi Pertama ---
-    startFfmpegStream();
+    console.log('[radio-http] Starting HTTP metadata detection...');
+    poll();
+
+    // --- Interval Polling (Setiap 10 Detik) ---
+    metadataInterval = setInterval(() => {
+        poll();
+    }, 10000);
 
     return {
         stop: () => {
-            console.log('[radio] Stopping metadata detection manually...');
+            console.log('[radio-http] Stopping metadata detection manually...');
             queue.radioStopped = true;
-            if (restartTimeout) clearTimeout(restartTimeout);
-            if (ffProcess && !ffProcess.killed) ffProcess.kill('SIGKILL');
+            if (metadataInterval) {
+                clearInterval(metadataInterval);
+                metadataInterval = null;
+            }
         },
         getStatus: () => ({
             currentSong,
             lastSuccessfulDetection,
             consecutiveErrors,
-            isRunning: ffProcess && !ffProcess.killed
+            isRunning: !!metadataInterval && !queue.radioStopped
         })
     };
 }
