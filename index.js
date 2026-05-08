@@ -628,9 +628,34 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
     ff.stderr.on('data', (data) => {
         const stderrOutput = data.toString();
 
-        // Detect broken pipe errors
-        if (stderrOutput.includes('Broken pipe') || stderrOutput.includes('av_interleaved_write_frame(): Broken pipe')) {
-            console.log('[radio] Broken pipe detected, this will trigger automatic restart...');
+        // Detect various broken pipe and stream error patterns
+        const brokenPipePatterns = [
+            'Broken pipe',
+            'av_interleaved_write_frame(): Broken pipe',
+            'Connection reset by peer',
+            'Connection timed out',
+            'Network error',
+            'Stream ended',
+            'End of file',
+            'Server returned 404',
+            'Server returned 5',
+            'Connection refused',
+            'No route to host',
+            'Host unreachable'
+        ];
+
+        const isBrokenPipe = brokenPipePatterns.some(pattern => stderrOutput.includes(pattern));
+
+        if (isBrokenPipe) {
+            console.log(`[radio] 🚨 Stream error detected: ${stderrOutput.trim()}`);
+            console.log('[radio] 🔄 Triggering automatic restart due to stream error...');
+
+            // Force restart after a short delay to ensure proper cleanup
+            setTimeout(() => {
+                if (!ff.killed) {
+                    ff.kill('SIGTERM');
+                }
+            }, 1000);
         }
 
         // Skip the muxing overhead error message that appears when adding to recently played
@@ -657,7 +682,7 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
     // Add method to get current stream stats
     ff.getStreamStats = () => ({
         sizeMB: (streamSize / 1024 / 1024).toFixed(2),
-        lastRestart: new Date(lastRestartTime).toISOString()
+        lastRestart: new Date(lastRestartTime + 7 * 60 * 60 * 1000).toISOString().replace('T', ' ').substring(0, 19) + ' WIB'
     });
 
     return ff;
@@ -760,28 +785,32 @@ async function playSong(guild, song) {
     audio.processes.ytdlp.on("error", (err) => {
         console.error("yt-dlp error:", err)
         if (!queue.isMusicReconnecting && !queue.radioStopped) {
-            handleMusicStreamingError(guild, song, "yt-dlp")
+            handleMusicStreamingError(guild, song, "yt-dlp", err)
         }
     })
 
     audio.processes.ff.on("error", (err) => {
         console.error("ffmpeg error:", err)
         if (!queue.isMusicReconnecting && !queue.radioStopped) {
-            handleMusicStreamingError(guild, song, "ffmpeg")
+            handleMusicStreamingError(guild, song, "ffmpeg", err)
         }
     })
 
     audio.processes.ytdlp.on("close", (code) => {
         if (code !== 0 && code !== null && !queue.isMusicReconnecting && !queue.radioStopped) {
             console.error("yt-dlp exited with code:", code)
-            handleMusicStreamingError(guild, song, "yt-dlp")
+            const error = new Error(`yt-dlp exited with code ${code}`)
+            error.code = code
+            handleMusicStreamingError(guild, song, "yt-dlp", error)
         }
     })
 
     audio.processes.ff.on("close", (code) => {
         if (code !== 0 && code !== null && !queue.isMusicReconnecting && !queue.radioStopped) {
             console.error("ffmpeg exited with code:", code)
-            handleMusicStreamingError(guild, song, "ffmpeg")
+            const error = new Error(`ffmpeg exited with code ${code}`)
+            error.code = code
+            handleMusicStreamingError(guild, song, "ffmpeg", error)
         }
     })
 
@@ -794,7 +823,7 @@ async function playSong(guild, song) {
     queue.player.on("error", (err) => {
         console.error("Audio player error:", err)
         if (!queue.isMusicReconnecting && !queue.radioStopped) {
-            handleMusicStreamingError(guild, song, "player")
+            handleMusicStreamingError(guild, song, "player", err)
         }
     })
 
@@ -839,18 +868,41 @@ async function playSong(guild, song) {
 
 }
 
-function handleMusicStreamingError(guild, song, source) {
+function handleMusicStreamingError(guild, song, source, error = null) {
     const queue = queues.get(guild.id)
     if (!queue) return
 
-    console.log(`[music] ${source} failed, attempting reconnect...`)
+    // Log detailed error information
+    console.log(`[music] 🚨 ${source} failed, attempting reconnect...`)
+    if (error) {
+        console.log(`[music] Error details:`, error.message || error)
+    }
+
+    // Check for specific broken pipe patterns
+    const isBrokenPipe = error && (
+        error.message?.includes('Broken pipe') ||
+        error.message?.includes('EPIPE') ||
+        error.message?.includes('Connection reset') ||
+        error.message?.includes('Connection timed out') ||
+        error.code === 'EPIPE' ||
+        error.code === 'ECONNRESET'
+    )
+
+    if (isBrokenPipe) {
+        console.log(`[music] 🔧 Broken pipe detected in ${source}, will attempt aggressive reconnect...`)
+    }
+
     queue.isMusicReconnecting = true
     queue.musicReconnectAttempts++
 
-    const MAX_MUSIC_RECONNECT_ATTEMPTS = 3
+    const MAX_MUSIC_RECONNECT_ATTEMPTS = isBrokenPipe ? 5 : 3 // More attempts for broken pipe
 
     if (queue.musicReconnectAttempts >= MAX_MUSIC_RECONNECT_ATTEMPTS) {
-        queue.textChannel.send(`❌ Musik gagal diputar setelah ${MAX_MUSIC_RECONNECT_ATTEMPTS} percobaan reconnect. Melanjutkan ke lagu berikutnya...`)
+        const errorMsg = isBrokenPipe ?
+            `❌ Musik terputus (broken pipe) setelah ${MAX_MUSIC_RECONNECT_ATTEMPTS} percobaan reconnect. Melanjutkan ke lagu berikutnya...` :
+            `❌ Musik gagal diputar setelah ${MAX_MUSIC_RECONNECT_ATTEMPTS} percobaan reconnect. Melanjutkan ke lagu berikutnya...`
+
+        queue.textChannel.send(errorMsg)
         queue.musicReconnectAttempts = 0
         queue.isMusicReconnecting = false
         queue.musicReconnectMessage = null
@@ -861,7 +913,9 @@ function handleMusicStreamingError(guild, song, source) {
         return
     }
 
-    const delay = Math.min(3000 * Math.pow(2, queue.musicReconnectAttempts - 1), 10000)
+    // Use shorter delay for broken pipe errors to recover faster
+    const baseDelay = isBrokenPipe ? 1500 : 3000
+    const delay = Math.min(baseDelay * Math.pow(2, queue.musicReconnectAttempts - 1), 10000)
     const reconnectText = `❌ Musik terputus (${source}), mencoba reconnect (${queue.musicReconnectAttempts}/${MAX_MUSIC_RECONNECT_ATTEMPTS}) dalam ${delay / 1000} detik...`
 
     if (queue.musicReconnectMessage) {
@@ -921,8 +975,12 @@ async function playRadio(guild, radioUrl, radioName) {
         // Check if this is an actual error that requires reconnection
         const isError = (code !== 0 && code !== null && code !== 1 && signal !== 'SIGTERM' && signal !== 15)
 
+        // Check for broken pipe indicators in exit codes
+        const isBrokenPipe = (code === 32 || code === 1) && signal === null
+
         if (isError && !queue.radioStopped && !queue.isReconnecting) {
-            console.log('[radio] ffmpeg closed unexpectedly, stopping metadata and triggering reconnect...');
+            const errorType = isBrokenPipe ? "broken pipe" : "stream error"
+            console.log(`[radio] 🚨 ffmpeg closed due to ${errorType}, stopping metadata and triggering reconnect...`);
 
             // Stop metadata detector when radio crashes
             if (queue.metadataDetector) {
@@ -934,14 +992,26 @@ async function playRadio(guild, radioUrl, radioName) {
             queue.isReconnecting = true
             queue.radioReconnectAttempts++
 
-            if (queue.radioReconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-                queue.textChannel.send(`❌ Radio stream terputus setelah ${MAX_RECONNECT_ATTEMPTS} percobaan reconnect. Mohon coba lagi nanti.`)
+            // Use more attempts for broken pipe errors
+            const maxAttempts = isBrokenPipe ? MAX_RECONNECT_ATTEMPTS + 2 : MAX_RECONNECT_ATTEMPTS
+
+            if (queue.radioReconnectAttempts >= maxAttempts) {
+                const errorMsg = isBrokenPipe ?
+                    `❌ Radio stream terputus (broken pipe) setelah ${maxAttempts} percobaan reconnect. Mohon coba lagi nanti.` :
+                    `❌ Radio stream terputus setelah ${maxAttempts} percobaan reconnect. Mohon coba lagi nanti.`
+                queue.textChannel.send(errorMsg)
                 queue.radioStopped = true
                 queue.isReconnecting = false
                 return
             }
 
-            queue.textChannel.send(`🔄 Radio stream terputus, mencoba reconnect (${queue.radioReconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`)
+            // Use shorter delay for broken pipe to recover faster
+            const delay = isBrokenPipe ? 1500 : 3000
+            const reconnectMsg = isBrokenPipe ?
+                `🔄 Radio stream terputus (broken pipe), mencoba reconnect (${queue.radioReconnectAttempts}/${maxAttempts})...` :
+                `🔄 Radio stream terputus, mencoba reconnect (${queue.radioReconnectAttempts}/${maxAttempts})...`
+
+            queue.textChannel.send(reconnectMsg)
 
             setTimeout(() => {
                 const currentQueue = queues.get(guild.id)
@@ -951,7 +1021,7 @@ async function playRadio(guild, radioUrl, radioName) {
                 } else {
                     queue.isReconnecting = false
                 }
-            }, 3000)
+            }, delay)
         } else if (signal === 'SIGTERM' || signal === 15) {
             console.log('[radio] ffmpeg terminated normally (SIGTERM), no reconnect needed');
         }
