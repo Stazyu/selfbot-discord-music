@@ -158,19 +158,27 @@ function startRadioMetadataDetection(radioUrl, queue) {
         });
     }
 
-    // Start metadata detection (real-time updates via stderr)
-    console.log('[radio] Starting metadata detection (real-time mode)');
+    // Start metadata detection (real-time + interval refresh)
+    console.log('[radio] Starting metadata detection (real-time + interval mode)');
     detectMetadata(true);
+
+    // Add interval to refresh metadata every 10 seconds
+    metadataInterval = setInterval(() => detectMetadata(false), 10000);
+    console.log('[radio] Metadata detection interval started: 10000ms');
 
     return {
         stop: () => {
+            if (metadataInterval) {
+                clearInterval(metadataInterval);
+                metadataInterval = null;
+            }
             console.log('[radio] Metadata detection stopped');
         },
         getStatus: () => ({
             currentSong,
             lastSuccessfulDetection,
             consecutiveErrors,
-            isRunning: true
+            isRunning: !!metadataInterval
         })
     };
 }
