@@ -1014,10 +1014,14 @@ async function playRadio(guild, radioUrl, radioName) {
 
             setTimeout(() => {
                 const currentQueue = queues.get(guild.id)
-                if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
+                console.log(`[radio] 🔄 Reconnect check - Queue exists: ${!!currentQueue}, Radio stopped: ${currentQueue?.radioStopped}, Connection status: ${currentQueue?.connection?.state?.status}`)
+
+                if (currentQueue && !currentQueue.radioStopped) {
+                    console.log(`[radio] 🔄 Proceeding with radio reconnect...`)
                     // Metadata detector will be restarted automatically when playRadio is called
                     playRadio(guild, radioUrl, radioName)
                 } else {
+                    console.log(`[radio] ❌ Reconnect cancelled - Queue: ${!!currentQueue}, Stopped: ${currentQueue?.radioStopped}`)
                     queue.isReconnecting = false
                 }
             }, delay)
