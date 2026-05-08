@@ -977,7 +977,7 @@ async function playRadio(guild, radioUrl, radioName) {
         const isError = (code !== 0 && code !== null && signal !== 'SIGTERM' && signal !== 15) &&
             (!isBrokenPipe || code === 1)
 
-        if (isError && !queue.radioStopped && !queue.isReconnecting) {
+        if (isError && !queue.isReconnecting) {
             const errorType = isBrokenPipe ? "broken pipe" : "stream error"
             console.log(`[radio] 🚨 ffmpeg closed due to ${errorType}, stopping metadata and triggering reconnect...`);
 
@@ -990,6 +990,8 @@ async function playRadio(guild, radioUrl, radioName) {
 
             queue.isReconnecting = true
             queue.radioReconnectAttempts++
+            // Ensure radioStopped is false during reconnection
+            queue.radioStopped = false
 
             // Use more attempts for broken pipe errors
             const maxAttempts = isBrokenPipe ? MAX_RECONNECT_ATTEMPTS + 2 : MAX_RECONNECT_ATTEMPTS
