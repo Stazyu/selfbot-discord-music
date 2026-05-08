@@ -125,15 +125,18 @@ function saveState() {
 function loadState() {
     try {
         if (!fs.existsSync(STATE_FILE)) {
-            console.log(" No state file found, starting fresh")
-            return
+            console.log("ℹ️ No state file found, starting fresh")
+            console.log(`📁 State file location: ${STATE_FILE}`)
+            return null
         }
         const data = fs.readFileSync(STATE_FILE, "utf8")
         const state = JSON.parse(data)
-        console.log(" State loaded from", STATE_FILE)
+        console.log("✅ State loaded from", STATE_FILE)
+        console.log(`📋 State contains ${Object.keys(state).length} guild(s)`)
         return state
     } catch (err) {
-        console.error("Error loading state:", err)
+        console.error("❌ Error loading state:", err)
+        console.log(`📁 Attempted to load from: ${STATE_FILE}`)
         return null
     }
 }
@@ -145,14 +148,22 @@ client.on("ready", async () => {
     setPlaySongFunction(playSong)
     const state = loadState()
     if (state) {
+        console.log(`📋 Found state for ${Object.keys(state).length} guild(s)`)
         for (const [guildId, guildState] of Object.entries(state)) {
             const guild = client.guilds.cache.get(guildId)
-            if (!guild) continue
+            if (!guild) {
+                console.log(`⚠️ Guild ${guildId} not found in cache`)
+                continue
+            }
 
             const voiceChannel = guild.channels.cache.get(guildState.voiceChannelId)
-            if (!voiceChannel) continue
+            if (!voiceChannel) {
+                console.log(`⚠️ Voice channel ${guildState.voiceChannelId} not found in guild ${guildId}`)
+                continue
+            }
 
             const textChannel = client.channels.cache.get(guildState.textChannelId)
+            console.log(`📝 Found voice channel: ${voiceChannel.name} (${voiceChannel.id})`)
 
             try {
                 const connection = joinVoiceChannel({
@@ -184,21 +195,26 @@ client.on("ready", async () => {
                 }
                 queues.set(guildId, queue)
 
-                console.log(`🔄 Resuming playback for guild ${guildId}`)
+                console.log(`🔄 Resuming playback for guild ${guildId} - Queue: ${queue.songs.length} songs, Radio: ${queue.radioName || 'None'}`)
 
                 if (guildState.radioUrl && guildState.radioName && !guildState.radioStopped) {
                     console.log(`🔄 Resuming radio on startup: ${guildState.radioName}`)
                     queue.textChannel?.send("🔄 Reconnecting to radio after startup...")
                     setTimeout(() => playRadio(guild, guildState.radioUrl, guildState.radioName), 3000)
                 } else if (guildState.songs && guildState.songs.length > 0) {
-                    console.log(`🔄 Resuming music queue on startup`)
+                    console.log(`🔄 Resuming music queue on startup - ${queue.songs.length} songs`)
                     queue.textChannel?.send("🔄 Resuming music after startup...")
                     setTimeout(() => playSong(guild, guildState.songs[0]), 3000)
+                } else {
+                    console.log(`ℹ️ No active playback to resume for guild ${guildId}`)
                 }
             } catch (err) {
-                console.error(`Error resuming playback for guild ${guildId}:`, err)
+                console.error(`❌ Error resuming playback for guild ${guildId}:`, err)
+                queue.textChannel?.send("❌ Gagal reconnect setelah startup. Silakan coba manual.")
             }
         }
+    } else {
+        console.log("ℹ️ No state file found - starting fresh")
     }
 })
 
@@ -269,17 +285,31 @@ process.on("SIGINT", () => {
 
 async function resumeAllMusic() {
     console.log("🔄 Resuming all music/radio after reconnection...")
+    let resumedCount = 0
+    let failedCount = 0
+
     for (const [guildId, queue] of queues) {
-        if (!queue.voiceChannelId) continue
+        if (!queue.voiceChannelId) {
+            console.log(`⚠️ No voice channel ID stored for guild ${guildId}`)
+            continue
+        }
 
         const guild = client.guilds.cache.get(guildId)
-        if (!guild) continue
+        if (!guild) {
+            console.log(`⚠️ Guild ${guildId} not found in cache`)
+            failedCount++
+            continue
+        }
 
         try {
             const voiceChannel = guild.channels.cache.get(queue.voiceChannelId)
-            if (!voiceChannel) continue
+            if (!voiceChannel) {
+                console.log(`⚠️ Voice channel ${queue.voiceChannelId} not found in guild ${guildId}`)
+                failedCount++
+                continue
+            }
 
-            console.log(`🔄 Rejoining voice channel for guild ${guildId}`)
+            console.log(`🔄 Rejoining voice channel: ${voiceChannel.name} (${voiceChannel.id}) for guild ${guildId}`)
 
             const connection = joinVoiceChannel({
                 channelId: voiceChannel.id,
@@ -302,16 +332,23 @@ async function resumeAllMusic() {
                 console.log(`🔄 Resuming radio: ${queue.radioName}`)
                 queue.textChannel?.send("🔄 Reconnecting to radio after deployment...")
                 setTimeout(() => playRadio(guild, queue.radioUrl, queue.radioName), 3000)
+                resumedCount++
             } else if (queue.songs.length > 0) {
-                console.log(`🔄 Resuming music queue`)
+                console.log(`🔄 Resuming music queue - ${queue.songs.length} songs`)
                 queue.textChannel?.send("🔄 Resuming music after deployment...")
                 setTimeout(() => playSong(guild, queue.songs[0]), 2000)
+                resumedCount++
+            } else {
+                console.log(`ℹ️ No active playback to resume for guild ${guildId}`)
             }
         } catch (err) {
-            console.error(`Error resuming music for guild ${guildId}:`, err)
+            console.error(`❌ Error resuming music for guild ${guildId}:`, err)
             queue.textChannel?.send("❌ Gagal reconnect setelah deployment. Silakan coba manual.")
+            failedCount++
         }
     }
+
+    console.log(`📊 Resume summary: ${resumedCount} successful, ${failedCount} failed`)
 }
 
 client.on("voiceStateUpdate", (oldState, newState) => {
@@ -566,10 +603,36 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
 
     const ff = spawn(ffmpeg, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
+    // Stream monitoring variables
+    let streamSize = 0;
+    let lastRestartTime = Date.now();
+    const MAX_STREAM_SIZE = 100 * 1024 * 1024; // 100MB limit
+    const MIN_RESTART_INTERVAL = 5 * 60 * 1000; // 5 minutes minimum between restarts
+
     ff.on('spawn', () => console.log('[radio] ffmpeg spawned for', inputUrl));
+
+    // Monitor stdout stream size
+    ff.stdout.on('data', (chunk) => {
+        streamSize += chunk.length;
+
+        // Check if stream size exceeds limit and enough time has passed
+        if (streamSize > MAX_STREAM_SIZE && (Date.now() - lastRestartTime) > MIN_RESTART_INTERVAL) {
+            console.log(`[radio] Stream size reached ${(streamSize / 1024 / 1024).toFixed(2)}MB, restarting to prevent broken pipe...`);
+
+            // Kill current process and trigger restart
+            ff.kill('SIGTERM');
+            lastRestartTime = Date.now();
+        }
+    });
 
     ff.stderr.on('data', (data) => {
         const stderrOutput = data.toString();
+
+        // Detect broken pipe errors
+        if (stderrOutput.includes('Broken pipe') || stderrOutput.includes('av_interleaved_write_frame(): Broken pipe')) {
+            console.log('[radio] Broken pipe detected, this will trigger automatic restart...');
+        }
+
         // Skip the muxing overhead error message that appears when adding to recently played
         if (!stderrOutput.includes('0kB other streams:0kB global headers:0kB muxing overhead: unknown')) {
             console.error('[radio] ffmpeg stderr:', stderrOutput);
@@ -578,6 +641,8 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
 
     ff.on('close', (code, signal) => {
         console.log('[radio] ffmpeg closed with code', code, 'signal:', signal);
+        console.log(`[radio] Final stream size: ${(streamSize / 1024 / 1024).toFixed(2)}MB`);
+
         if (onClose) onClose(code, signal);
         // Don't treat signal 15 (SIGTERM) as an error - it's often normal termination
         if (code !== 0 && code !== null && code !== 1 && signal !== 'SIGTERM' && signal !== 15) {
@@ -587,6 +652,12 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
 
     ff.on('error', (err) => {
         console.error('[radio] ffmpeg process error:', err);
+    });
+
+    // Add method to get current stream stats
+    ff.getStreamStats = () => ({
+        sizeMB: (streamSize / 1024 / 1024).toFixed(2),
+        lastRestart: new Date(lastRestartTime).toISOString()
     });
 
     return ff;
@@ -1429,6 +1500,7 @@ client.on("messageCreate", async msg => {
 **?stop** - Stop playing and clear queue
 **?volume** [0-100] - Set or check playback volume
 **?radio** <station name or URL> - Play a radio station
+**?radiostats** - Show radio stream statistics
 **?clearchat** [number] - Delete messages in text channel (default 100, max 100)
 **?leave** - Leave voice channel and clear queue
 **?sync** - Sync channel ID dan auto-join ke voice channel saat ini
@@ -1447,6 +1519,33 @@ client.on("messageCreate", async msg => {
             return msg.reply("❌ Bot belum join ke voice channel. Gunakan command ?play atau ?radio terlebih dahulu.")
         }
         createCommandPanel(msg, queue)
+    }
+
+    if (cmd === "radiostats") {
+        if (!queue || !queue.radioFfmpeg) {
+            return msg.reply("❌ Tidak ada radio yang sedang dimainkan")
+        }
+
+        const stats = queue.radioFfmpeg.getStreamStats ? queue.radioFfmpeg.getStreamStats() : { sizeMB: 'Unknown', lastRestart: 'Unknown' }
+
+        let statsMsg = `📊 **Radio Stream Statistics** 📊\n\n`
+        statsMsg += `📻 **Station:** ${queue.radioName || 'Unknown'}\n`
+        statsMsg += `📏 **Stream Size:** ${stats.sizeMB}MB\n`
+        statsMsg += `🔄 **Last Restart:** ${stats.lastRestart}\n`
+        statsMsg += `🔁 **Reconnect Attempts:** ${queue.radioReconnectAttempts || 0}/5\n`
+        statsMsg += `📡 **Status:** ${queue.isReconnecting ? 'Reconnecting...' : 'Connected'}\n`
+
+        if (queue.metadataDetector) {
+            const detectorStatus = queue.metadataDetector.getStatus()
+            statsMsg += `🎵 **Metadata Detector:** Active\n`
+            statsMsg += `   • Current Song: ${detectorStatus.currentSong || 'No data'}\n`
+            statsMsg += `   • Last Detection: ${new Date(detectorStatus.lastSuccessfulDetection).toLocaleString()}\n`
+            statsMsg += `   • Consecutive Errors: ${detectorStatus.consecutiveErrors}\n`
+        } else {
+            statsMsg += `🎵 **Metadata Detector:** Inactive\n`
+        }
+
+        msg.channel.send(statsMsg)
     }
 
     if (cmd === "state") {
