@@ -1,5 +1,6 @@
 const { Client } = require("discord.js-selfbot-v13")
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require("@discordjs/voice")
+const { MessageActionRow, MessageButton } = require("discord.js-selfbot-v13")
 const { spawn } = require("child_process")
 const ffmpegStatic = require("ffmpeg-static")
 const https = require("https")
@@ -1586,6 +1587,7 @@ client.on("messageCreate", async msg => {
 **?sync** - Sync channel ID dan auto-join ke voice channel saat ini
 **?state** - Show current bot state
 **?panel** - Show control panel with reaction UI
+**?testbutton** - Test button components (Pause, Skip, Stop)
 **?help** - Show this help message
 
 *You must be in a voice channel to use these commands*
@@ -1599,6 +1601,31 @@ client.on("messageCreate", async msg => {
             return msg.reply("❌ Bot belum join ke voice channel. Gunakan command ?play atau ?radio terlebih dahulu.")
         }
         createCommandPanel(msg, queue)
+    }
+
+    if (cmd === "testbutton") {
+        const row = new MessageActionRow()
+            .addComponents(
+                new MessageButton()
+                    .setCustomId("pause")
+                    .setLabel("Pause")
+                    .setStyle("SECONDARY"),
+
+                new MessageButton()
+                    .setCustomId("skip")
+                    .setLabel("Next")
+                    .setStyle("PRIMARY"),
+
+                new MessageButton()
+                    .setCustomId("stop")
+                    .setLabel("Stop")
+                    .setStyle("DANGER")
+            )
+
+        await msg.channel.send({
+            content: "🎵 **Test Button Panel** 🎵\n\nSilakan test button di bawah ini:",
+            components: [row]
+        })
     }
 
     if (cmd === "radiostats") {
@@ -1715,6 +1742,108 @@ client.on("messageCreate", async msg => {
         msg.channel.send(stateMsg)
     }
 
+})
+
+// Button interaction handler
+client.on("interactionCreate", async (interaction) => {
+    if (!interaction.isButton()) return
+
+    // Check if user is authorized
+    if (config.allowedUsers.length > 0 && !config.allowedUsers.includes(interaction.user.id)) {
+        return interaction.reply({
+            content: "❌ Kamu tidak diizinkan menggunakan button ini!",
+            ephemeral: true
+        })
+    }
+
+    const queue = queues.get(interaction.guild.id)
+    const buttonId = interaction.customId
+
+    if (buttonId === "pause") {
+        if (!queue) {
+            return interaction.reply({
+                content: "❌ Tidak ada musik yang sedang diputar",
+                ephemeral: true
+            })
+        }
+
+        if (queue.player.state.status === AudioPlayerStatus.Playing) {
+            queue.player.pause()
+            await interaction.update({
+                content: "⏸️ **Music Paused**",
+                components: []
+            })
+        } else if (queue.player.state.status === AudioPlayerStatus.Paused) {
+            queue.player.unpause()
+            await interaction.update({
+                content: "▶️ **Music Resumed**",
+                components: []
+            })
+        } else {
+            return interaction.reply({
+                content: "❌ Tidak ada musik yang sedang diputar",
+                ephemeral: true
+            })
+        }
+    }
+
+    if (buttonId === "skip") {
+        if (!queue || (!queue.songs || queue.songs.length === 0)) {
+            return interaction.reply({
+                content: "❌ Tidak ada lagu berikutnya untuk di-skip",
+                ephemeral: true
+            })
+        }
+
+        queue.isSkipping = true
+        if (queue.currentProcesses) {
+            queue.currentProcesses.ytdlp.kill()
+            queue.currentProcesses.ff.kill()
+        }
+        queue.player.stop()
+        saveState()
+
+        await interaction.update({
+            content: "⏭️ **Song Skipped!**",
+            components: []
+        })
+    }
+
+    if (buttonId === "stop") {
+        if (!queue) {
+            return interaction.reply({
+                content: "❌ Tidak ada musik yang sedang diputar",
+                ephemeral: true
+            })
+        }
+
+        if (queue.currentProcesses) {
+            queue.currentProcesses.ytdlp.kill()
+            queue.currentProcesses.ff.kill()
+        }
+        if (queue.radioFfmpeg) {
+            queue.radioFfmpeg.kill()
+        }
+        if (queue.metadataDetector) {
+            queue.metadataDetector.stop()
+            queue.metadataDetector = null
+        }
+
+        queue.radioStopped = true
+        queue.playing = false
+        queue.isReconnecting = false
+        queue.isMusicReconnecting = false
+        queue.radioUrl = null
+        queue.radioName = null
+        queue.songs = []
+        queue.player.stop()
+        saveState()
+
+        await interaction.update({
+            content: "⏹️ **Music Stopped**",
+            components: []
+        })
+    }
 })
 
 client.login(TOKEN)
