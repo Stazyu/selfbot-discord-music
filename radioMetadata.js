@@ -168,7 +168,21 @@ function startRadioMetadataDetection(radioUrl, queue) {
             }
 
             queue.radioMessage.edit(messageText).catch(err => {
-                console.error(`[radio-http] Failed to update radio message:`, err.message);
+                // Specific handling for "Unknown Message" error
+                if (err.message.includes('Unknown Message')) {
+                    console.log('[radio-http] Radio message not found (Unknown Message), creating new message...');
+                    if (queue.textChannel) {
+                        queue.textChannel.send(messageText).then(newMessage => {
+                            queue.radioMessage = newMessage;
+                            console.log('[radio-http] Successfully created new radio message');
+                        }).catch(sendErr => {
+                            console.error(`[radio-http] Failed to create new radio message:`, sendErr.message);
+                        });
+                    }
+                } else {
+                    // Log other errors but don't create new message
+                    console.error(`[radio-http] Failed to update radio message:`, err.message);
+                }
             });
         }
     }
