@@ -373,7 +373,13 @@ client.on("voiceStateUpdate", (oldState, newState) => {
             }
 
             queue.voiceChannelId = oldState.channel.id
-            queue.textChannel?.send("⚠️ Bot terkick dari VC, mencoba rejoin dalam 5 detik...")
+            queue.textChannel?.send("⚠️ Bot terkick dari VC, mencoba rejoin dalam 5 detik...").catch(err => {
+                if (err.code === 50001) {
+                    console.error('[voice-state] Missing Access: Bot tidak memiliki izin untuk mengirim pesan ke channel setelah terkick dari VC')
+                } else {
+                    console.error('[voice-state] Gagal mengirim pesan setelah terkick dari VC:', err.message)
+                }
+            })
             setTimeout(() => {
                 const guild = client.guilds.cache.get(oldState.guild.id)
                 if (guild) {
