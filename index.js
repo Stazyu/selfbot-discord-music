@@ -1109,13 +1109,39 @@ client.on("messageCreate", async msg => {
     const cmd = args.shift().toLowerCase()
     const query = args.join(" ")
 
-    console.log(`\x1b[36m[COMMAND]\x1b[0m \x1b[33m${cmd}\x1b[0m | \x1b[35m👤 User:\x1b[0m ${msg.author.tag} (${msg.author.id}) | \x1b[34m💬 Channel:\x1b[0m ${msg.channel.name} (${msg.channel.id}) | \x1b[32m📝 Query:\x1b[0m ${query || "N/A"}`)
+    const channelName = msg.channel.name || "DM"
+    console.log(`\x1b[36m[COMMAND]\x1b[0m \x1b[33m${cmd}\x1b[0m | \x1b[35m👤 User:\x1b[0m ${msg.author.tag} (${msg.author.id}) | \x1b[34m💬 Channel:\x1b[0m ${channelName} (${msg.channel.id}) | \x1b[32m📝 Query:\x1b[0m ${query || "N/A"}`)
 
-    if (!msg.member) return
-    const voice = msg.member.voice.channel
-    if (!voice) return msg.reply("Join VC dulu")
+    // Handle DM commands by finding user's active voice channel across guilds
+    let guild = msg.guild
+    let voice = null
+    let queue = null
 
-    let queue = queues.get(msg.guild.id)
+    if (!msg.member) {
+        // DM: Find the user's active voice channel across all guilds
+        for (const [guildId, existingQueue] of queues) {
+            const g = client.guilds.cache.get(guildId)
+            if (!g) continue
+
+            const member = g.members.cache.get(msg.author.id)
+            if (member && member.voice.channel) {
+                guild = g
+                voice = member.voice.channel
+                queue = existingQueue
+                console.log(`[DM] Found user in voice channel: ${voice.name} in guild ${g.name}`)
+                break
+            }
+        }
+
+        if (!voice) {
+            return msg.reply("❌ Kamu harus berada di voice channel di salah satu server untuk menggunakan command ini di DM")
+        }
+    } else {
+        // Guild message: use the guild's voice channel
+        voice = msg.member.voice.channel
+        if (!voice) return msg.reply("Join VC dulu")
+        queue = queues.get(guild.id)
+    }
 
     if (cmd === "play") {
 
@@ -1224,8 +1250,8 @@ client.on("messageCreate", async msg => {
 
             const connection = joinVoiceChannel({
                 channelId: voice.id,
-                guildId: msg.guild.id,
-                adapterCreator: msg.guild.voiceAdapterCreator
+                guildId: guild.id,
+                adapterCreator: guild.voiceAdapterCreator
             })
 
             const player = createAudioPlayer()
@@ -1251,7 +1277,7 @@ client.on("messageCreate", async msg => {
                 isMusicReconnecting: false
             }
 
-            queues.set(msg.guild.id, queue)
+            queues.set(guild.id, queue)
 
         }
 
@@ -1273,7 +1299,7 @@ client.on("messageCreate", async msg => {
         console.log(`💾 State saved. Queue songs count: ${queue.songs.length}`)
 
         if (queue.songs.length === songs.length) {
-            playSong(msg.guild, queue.songs[0])
+            playSong(guild, queue.songs[0])
         }
 
     }
@@ -1389,7 +1415,7 @@ client.on("messageCreate", async msg => {
         queue.songs = []
         queue.player.stop()
         queue.connection.destroy()
-        queues.delete(msg.guild.id)
+        queues.delete(guild.id)
         saveState()
     }
 
@@ -1408,8 +1434,8 @@ client.on("messageCreate", async msg => {
             if (!queue) {
                 const connection = joinVoiceChannel({
                     channelId: voice.id,
-                    guildId: msg.guild.id,
-                    adapterCreator: msg.guild.voiceAdapterCreator
+                    guildId: guild.id,
+                    adapterCreator: guild.voiceAdapterCreator
                 })
 
                 const player = createAudioPlayer()
@@ -1433,7 +1459,7 @@ client.on("messageCreate", async msg => {
                     isMusicReconnecting: false
                 }
 
-                queues.set(msg.guild.id, queue)
+                queues.set(guild.id, queue)
             } else {
                 // Preserve existing volume and playHistory
                 console.log("📻 Preserving existing volume and playHistory for radio")
@@ -1445,7 +1471,7 @@ client.on("messageCreate", async msg => {
                 queue.currentProcesses.ff.kill()
             }
 
-            playRadio(msg.guild, radio.url, radio.name)
+            playRadio(guild, radio.url, radio.name)
 
         } catch (err) {
             console.error("Radio error:", err)
@@ -1481,6 +1507,11 @@ client.on("messageCreate", async msg => {
         const textChannel = queue.textChannel
         if (!textChannel) return msg.reply("Tidak ada text channel terkait")
 
+        // Check if textChannel is a DM (DMs don't have guild)
+        if (!textChannel.guild) {
+            return msg.reply("❌ Command ini tidak bisa digunakan di DM. Gunakan di server text channel.")
+        }
+
         const countArg = args[0]
         let limit = 100
         if (countArg) {
@@ -1490,7 +1521,7 @@ client.on("messageCreate", async msg => {
         }
 
         try {
-            msg.channel.send(`🗑️ Menghapus ${limit} pesan terakhir...`)
+            msg.channel.send(`🗑️ Menghapus ${limit} pesan terakhir dari text channel server...`)
 
             const messages = await textChannel.messages.fetch({ limit: limit })
             const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
@@ -1511,7 +1542,7 @@ client.on("messageCreate", async msg => {
                 }
             }
 
-            msg.channel.send(`✅ Berhasil menghapus **${deletedCount}** pesan`)
+            msg.channel.send(`✅ Berhasil menghapus **${deletedCount}** pesan dari text channel server`)
         } catch (err) {
             console.error("Error deleting messages:", err)
             msg.channel.send("❌ Gagal menghapus pesan: " + err.message)
@@ -1519,10 +1550,20 @@ client.on("messageCreate", async msg => {
     }
 
     if (cmd === "clearreactions") {
+        if (!queue) return msg.reply("Bot belum join ke voice channel")
+
+        const textChannel = queue.textChannel
+        if (!textChannel) return msg.reply("Tidak ada text channel terkait")
+
+        // Check if textChannel is a DM (DMs don't have guild)
+        if (!textChannel.guild) {
+            return msg.reply("❌ Command ini tidak bisa digunakan di DM. Gunakan di server text channel.")
+        }
+
         try {
-            msg.channel.send("🧹 Menghapus semua reaction dari channel...")
-            await removeAllReactionsFromChannel(msg.channel)
-            msg.channel.send("✅ Semua reaction berhasil dihapus")
+            msg.channel.send("🧹 Menghapus semua reaction dari text channel server...")
+            await removeAllReactionsFromChannel(textChannel)
+            msg.channel.send("✅ Semua reaction berhasil dihapus dari text channel server")
         } catch (err) {
             console.error("Error clearing reactions:", err)
             msg.channel.send("❌ Gagal menghapus reaction: " + err.message)
@@ -1532,8 +1573,12 @@ client.on("messageCreate", async msg => {
     if (cmd === "sync") {
         if (!queue) return msg.reply("❌ Tidak ada queue yang aktif. Gunakan command ?play atau ?radio terlebih dahulu.")
 
-        const voice = msg.member.voice.channel
         if (!voice) return msg.reply("❌ Kamu harus berada di voice channel!")
+
+        // Don't allow sync from DM as it would change textChannel to DM
+        if (!msg.member) {
+            return msg.reply("❌ Command ini tidak bisa digunakan di DM. Gunakan di server text channel.")
+        }
 
         try {
             // Update voice channel ID dan text channel
@@ -1547,8 +1592,8 @@ client.on("messageCreate", async msg => {
 
             const connection = joinVoiceChannel({
                 channelId: voice.id,
-                guildId: msg.guild.id,
-                adapterCreator: msg.guild.voiceAdapterCreator
+                guildId: guild.id,
+                adapterCreator: guild.voiceAdapterCreator
             })
 
             connection.subscribe(queue.player)
@@ -1558,9 +1603,9 @@ client.on("messageCreate", async msg => {
 
             // Resume playback jika ada
             if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
-                playRadio(msg.guild, queue.radioUrl, queue.radioName)
+                playRadio(guild, queue.radioUrl, queue.radioName)
             } else if (queue.songs && queue.songs.length > 0) {
-                playSong(msg.guild, queue.songs[0])
+                playSong(guild, queue.songs[0])
             }
 
             saveState()
@@ -1595,6 +1640,7 @@ client.on("messageCreate", async msg => {
 **?help** - Show this help message
 
 *You must be in a voice channel to use these commands*
+*Commands can also be used in DMs when the bot is already in a voice channel*
         `.trim()
 
         msg.channel.send(helpEmbed)
