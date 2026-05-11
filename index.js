@@ -1258,8 +1258,11 @@ client.on("messageCreate", async msg => {
 
             connection.subscribe(player)
 
+            // Use guild's system channel or first text channel for playback notifications when in DM
+            const playbackChannel = msg.channel.guild ? msg.channel : (voice.guild.systemChannel || voice.guild.channels.cache.find(c => c.isTextBased() && c.type === 0) || voice.guild.channels.cache.first())
+
             queue = {
-                textChannel: msg.channel,
+                textChannel: playbackChannel,
                 connection,
                 player,
                 songs: [],
@@ -1442,8 +1445,11 @@ client.on("messageCreate", async msg => {
 
                 connection.subscribe(player)
 
+                // Use guild's system channel or first text channel for playback notifications when in DM
+                const playbackChannel = msg.channel.guild ? msg.channel : (voice.guild.systemChannel || voice.guild.channels.cache.find(c => c.isTextBased() && c.type === 0) || voice.guild.channels.cache.first())
+
                 queue = {
-                    textChannel: msg.channel,
+                    textChannel: playbackChannel,
                     connection,
                     player,
                     songs: [],
