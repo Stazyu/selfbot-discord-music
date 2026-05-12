@@ -840,7 +840,7 @@ async function playSong(guild, song) {
     })
 
     const nowPlayingMsg = await queue.textChannel.send(`🎵 Now playing **${song.title}** 🎵`)
-    queue.reactionCollector = createReactionUI(nowPlayingMsg, queue)
+    // queue.reactionCollector = createReactionUI(nowPlayingMsg, queue)
     saveState()
 
     queue.player.once(AudioPlayerStatus.Idle, () => {
@@ -1074,7 +1074,7 @@ async function playRadio(guild, radioUrl, radioName) {
         // Send new radio message if first time or no existing message
         const radioMsg = await queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
         queue.radioMessage = radioMsg
-        queue.reactionCollector = createReactionUI(radioMsg, queue)
+        // queue.reactionCollector = createReactionUI(radioMsg, queue)
     }
 
     if (queue.reconnectMessage) {
