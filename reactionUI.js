@@ -249,9 +249,9 @@ async function createCommandPanel(message, queue) {
                         queue.currentProcesses.ff.kill()
                     }
                     queue.player.stop()
-                    queue.textChannel.send("⏮️ Playing previous song")
+                    message.channel.send("⏮️ Playing previous song")
                 } else {
-                    queue.textChannel.send("ℹ️ No previous song in queue")
+                    message.channel.send("ℹ️ No previous song in queue")
                 }
                 break
 
@@ -259,10 +259,10 @@ async function createCommandPanel(message, queue) {
                 // Play/Pause
                 if (queue.player.state.status === "paused") {
                     queue.player.unpause()
-                    queue.textChannel.send("▶️ Resumed")
+                    message.channel.send("▶️ Resumed")
                 } else {
                     queue.player.pause()
-                    queue.textChannel.send("⏸️ Paused")
+                    message.channel.send("⏸️ Paused")
                 }
                 break
 
@@ -273,7 +273,7 @@ async function createCommandPanel(message, queue) {
                     queue.currentProcesses.ff.kill()
                 }
                 queue.player.stop()
-                queue.textChannel.send("⏭️ Skipped")
+                message.channel.send("⏭️ Skipped")
                 break
 
             case "🔉":
@@ -282,7 +282,7 @@ async function createCommandPanel(message, queue) {
                 if (queue.player.state.status === "playing" && queue.player.state.resource?.volume) {
                     queue.player.state.resource.volume.setVolume(queue.volume)
                 }
-                queue.textChannel.send(`🔉 Volume: **${Math.round(queue.volume * 100)}%**`)
+                message.channel.send(`🔉 Volume: **${Math.round(queue.volume * 100)}%**`)
                 break
 
             case "🔊":
@@ -291,7 +291,7 @@ async function createCommandPanel(message, queue) {
                 if (queue.player.state.status === "playing" && queue.player.state.resource?.volume) {
                     queue.player.state.resource.volume.setVolume(queue.volume)
                 }
-                queue.textChannel.send(`🔊 Volume: **${Math.round(queue.volume * 100)}%**`)
+                message.channel.send(`🔊 Volume: **${Math.round(queue.volume * 100)}%**`)
                 break
 
             case "⏹":
@@ -306,7 +306,7 @@ async function createCommandPanel(message, queue) {
                 queue.songs = []
                 queue.radioStopped = true
                 queue.player.stop()
-                queue.textChannel.send("⏹️ Stopped & Queue Cleared")
+                message.channel.send("⏹️ Stopped & Queue Cleared")
                 break
 
             case "🎵":
@@ -317,10 +317,10 @@ async function createCommandPanel(message, queue) {
                         queue.radioFfmpeg = null
                     }
                     queue.radioStopped = true
-                    queue.textChannel.send("🎵 Switching to Music Mode")
+                    message.channel.send("🎵 Switching to Music Mode")
                     playSong(queue.textChannel.guild, queue.songs[0])
                 } else {
-                    queue.textChannel.send("ℹ️ No songs in queue. Use ?play to add songs first")
+                    message.channel.send("ℹ️ No songs in queue. Use ?play to add songs first")
                 }
                 break
 
@@ -332,20 +332,20 @@ async function createCommandPanel(message, queue) {
                         queue.currentProcesses.ff.kill()
                     }
                     queue.radioStopped = false
-                    queue.textChannel.send("📻 Switching back to Radio Mode")
+                    message.channel.send("📻 Switching back to Radio Mode")
                     // Use setTimeout to avoid circular dependency
                     setTimeout(() => {
                         const { playRadio } = require("./index.js")
                         playRadio(queue.textChannel.guild, queue.radioUrl, queue.radioName)
                     }, 100)
                 } else {
-                    queue.textChannel.send("ℹ️ No radio station available. Use ?radio to set a station first")
+                    message.channel.send("ℹ️ No radio station available. Use ?radio to set a station first")
                 }
                 break
 
             case "🗑️":
                 // Clear last 10 messages
-                const messages = await queue.textChannel.messages.fetch({ limit: 11 })
+                const messages = await message.channel.messages.fetch({ limit: 11 })
                 const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
                 const messagesToDelete = messages.filter(m => m.createdTimestamp > twoWeeksAgo && m.id !== panelMsg.id)
 
@@ -358,7 +358,7 @@ async function createCommandPanel(message, queue) {
                         console.error("Error deleting message:", err)
                     }
                 }
-                queue.textChannel.send(`🗑️ Deleted **${deletedCount}** messages`)
+                message.channel.send(`🗑️ Deleted **${deletedCount}** messages`)
                 break
 
             case "ℹ️":
@@ -391,7 +391,7 @@ async function createCommandPanel(message, queue) {
                         }
                     })
                 }
-                queue.textChannel.send(queueInfo)
+                message.channel.send(queueInfo)
                 break
         }
 
