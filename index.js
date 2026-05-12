@@ -1374,28 +1374,31 @@ client.on("messageCreate", async msg => {
     }
 
     if (cmd === "stop") {
-        if (queue?.currentProcesses) {
+        if (!queue) {
+            return msg.reply("❌ Tidak ada musik yang sedang diputar")
+        }
+
+        if (queue.currentProcesses) {
             queue.currentProcesses.ytdlp.kill()
             queue.currentProcesses.ff.kill()
         }
-        if (queue?.radioFfmpeg) {
+        if (queue.radioFfmpeg) {
             queue.radioFfmpeg.kill()
         }
-        if (queue?.metadataDetector) {
+        if (queue.metadataDetector) {
             queue.metadataDetector.stop()
             queue.metadataDetector = null
         }
-        if (queue) {
-            queue.radioStopped = true
-            queue.playing = false
-            queue.isReconnecting = false
-            queue.isMusicReconnecting = false
-            queue.radioUrl = null
-            queue.radioName = null
-            queue.hasReactionUI = false
-            queue.radioMessage = null
-            queue.musicReconnectMessage = null
-        }
+
+        queue.radioStopped = true
+        queue.playing = false
+        queue.isReconnecting = false
+        queue.isMusicReconnecting = false
+        queue.radioUrl = null
+        queue.radioName = null
+        queue.hasReactionUI = false
+        queue.radioMessage = null
+        queue.musicReconnectMessage = null
         queue.songs = []
         queue.player.stop()
         saveState()
