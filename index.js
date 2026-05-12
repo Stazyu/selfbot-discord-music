@@ -1,5 +1,5 @@
 const { Client } = require("discord.js-selfbot-v13")
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require("@discordjs/voice")
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, StreamType } = require("@discordjs/voice")
 const { spawn } = require("child_process")
 const ffmpegStatic = require("ffmpeg-static")
 const https = require("https")
@@ -609,7 +609,7 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
     if (codec === 'opus') {
         args.push('-c:a', 'copy');
     } else {
-        args.push('-f', 'opus', '-ar', '48000', '-ac', '2', '-b:a', '128k');
+        args.push('-f', 'ogg', '-ar', '48000', '-ac', '2', '-b:a', '128k');
     }
 
     args.push('pipe:1');
@@ -1051,7 +1051,7 @@ async function playRadio(guild, radioUrl, radioName) {
     })
     queue.radioFfmpeg = ff
 
-    const resource = createAudioResource(ff.stdout, { inlineVolume: true })
+    const resource = createAudioResource(ff.stdout, { inlineVolume: true, inputType: StreamType.OggOpus })
     resource.volume.setVolume(queue.volume ?? 1.0)
 
     queue.player.play(resource)
