@@ -1639,28 +1639,28 @@ client.on("messageCreate", async msg => {
         }
 
         // Security check for DM usage
-        if (!msg.member) {
-            // DM: Only allow joining channels where user is currently in voice
-            let userInVoice = false
-            let targetGuild = null
+        // if (!msg.member) {
+        //     // DM: Only allow joining channels where user is currently in voice
+        //     let userInVoice = false
+        //     let targetGuild = null
 
-            for (const [guildId, existingQueue] of queues) {
-                const g = client.guilds.cache.get(guildId)
-                if (!g) continue
+        //     for (const [guildId, existingQueue] of queues) {
+        //         const g = client.guilds.cache.get(guildId)
+        //         if (!g) continue
 
-                const member = g.members.cache.get(msg.author.id)
-                if (member && member.voice.channel && member.voice.channel.id === voiceChannelId) {
-                    userInVoice = true
-                    targetGuild = g
-                    guild = g // Update guild context
-                    break
-                }
-            }
+        //         const member = g.members.cache.get(msg.author.id)
+        //         if (member && member.voice.channel && member.voice.channel.id === voiceChannelId) {
+        //             userInVoice = true
+        //             targetGuild = g
+        //             guild = g // Update guild context
+        //             break
+        //         }
+        //     }
 
-            if (!userInVoice) {
-                return msg.reply("❌ Di DM, kamu hanya bisa join ke voice channel dimana kamu sedang berada")
-            }
-        }
+        //     if (!userInVoice) {
+        //         return msg.reply("❌ Di DM, kamu hanya bisa join ke voice channel dimana kamu sedang berada")
+        //     }
+        // }
 
         // Find the voice channel by ID
         const voiceChannel = guild.channels.cache.get(voiceChannelId)
