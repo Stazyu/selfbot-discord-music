@@ -1539,7 +1539,7 @@ client.on("messageCreate", async msg => {
             const messages = await textChannel.messages.fetch({ limit: limit })
             const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
 
-            const messagesToDelete = messages.filter(m => m.createdTimestamp > twoWeeksAgo && m.author.id !== client.user.id)
+            const messagesToDelete = messages.filter(m => m.createdTimestamp > twoWeeksAgo && m.author.id === client.user.id)
 
             if (messagesToDelete.size === 0) {
                 return msg.channel.send("ℹ️ Tidak ada pesan yang bisa dihapus (pesan lebih dari 14 hari tidak bisa dihapus)")
