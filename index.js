@@ -1133,7 +1133,7 @@ client.on("messageCreate", async msg => {
             }
         }
 
-        if (!voice) {
+        if (!voice && !(cmd === "join")) {
             return msg.reply("❌ Kamu harus berada di voice channel di salah satu server untuk menggunakan command ini di DM")
         }
     } else {
@@ -1622,6 +1622,107 @@ client.on("messageCreate", async msg => {
         }
     }
 
+    if (cmd === "join") {
+        const voiceChannelId = args[0]
+        if (!voiceChannelId) {
+            return msg.reply("Usage: ?join <voice_channel_id>")
+        }
+
+        // Security check for DM usage
+        if (!msg.member) {
+            // DM: Only allow joining channels where user is currently in voice
+            let userInVoice = false
+            let targetGuild = null
+
+            for (const [guildId, existingQueue] of queues) {
+                const g = client.guilds.cache.get(guildId)
+                if (!g) continue
+
+                const member = g.members.cache.get(msg.author.id)
+                if (member && member.voice.channel && member.voice.channel.id === voiceChannelId) {
+                    userInVoice = true
+                    targetGuild = g
+                    guild = g // Update guild context
+                    break
+                }
+            }
+
+            if (!userInVoice) {
+                return msg.reply("❌ Di DM, kamu hanya bisa join ke voice channel dimana kamu sedang berada")
+            }
+        }
+
+        // Find the voice channel by ID
+        const voiceChannel = guild.channels.cache.get(voiceChannelId)
+        if (!voiceChannel || voiceChannel.type !== 2) { // Voice channel type is 2
+            return msg.reply("❌ Voice channel tidak ditemukan atau ID tidak valid")
+        }
+
+        // Additional permission check for guild messages
+        if (msg.member) {
+            const member = guild.members.cache.get(msg.author.id)
+            if (!member || !member.permissionsIn(voiceChannel).has('CONNECT')) {
+                return msg.reply("❌ Kamu tidak memiliki izin untuk join ke voice channel tersebut")
+            }
+        }
+
+        try {
+            // Check if bot is already in a voice channel
+            if (queue && queue.connection) {
+                // Destroy existing connection before joining new one
+                queue.connection.destroy()
+            }
+
+            const connection = joinVoiceChannel({
+                channelId: voiceChannel.id,
+                guildId: guild.id,
+                adapterCreator: guild.voiceAdapterCreator
+            })
+
+            const player = createAudioPlayer()
+            connection.subscribe(player)
+
+            // Use guild's system channel or first text channel for notifications when in DM
+            const playbackChannel = msg.channel.guild ? msg.channel : (voiceChannel.guild.systemChannel || voiceChannel.guild.channels.cache.find(c => c.isTextBased() && c.type === 0) || voiceChannel.guild.channels.cache.first())
+
+            // Create or update queue
+            if (!queue) {
+                queue = {
+                    textChannel: playbackChannel,
+                    connection,
+                    player,
+                    songs: [],
+                    voiceChannelId: voiceChannel.id,
+                    volume: 1.0,
+                    playHistory: [],
+                    loopMode: 0,
+                    isSkipping: false,
+                    playing: false,
+                    radioUrl: null,
+                    radioName: null,
+                    radioStopped: true,
+                    musicReconnectAttempts: 0,
+                    musicReconnectMessage: null,
+                    isMusicReconnecting: false
+                }
+                queues.set(guild.id, queue)
+            } else {
+                // Update existing queue with new connection and channel
+                queue.connection = connection
+                queue.voiceChannelId = voiceChannel.id
+                queue.textChannel = playbackChannel
+                connection.subscribe(queue.player)
+            }
+
+            saveState()
+            msg.channel.send(`✅ Bot berhasil join ke voice channel: **${voiceChannel.name}**`)
+
+        } catch (err) {
+            console.error("Error joining voice channel:", err)
+            msg.reply("❌ Gagal join ke voice channel: " + err.message)
+        }
+    }
+
     if (cmd === "help") {
         const helpEmbed = `
 🎵 **Music Selfbot Commands** 🎵
@@ -1640,6 +1741,7 @@ client.on("messageCreate", async msg => {
 **?radiostats** - Show radio stream statistics
 **?clearchat** [number] - Delete messages in text channel (default 100, max 100)
 **?leave** - Leave voice channel and clear queue
+**?join** <voice_channel_id> - Join voice channel by ID
 **?sync** - Sync channel ID dan auto-join ke voice channel saat ini
 **?state** - Show current bot state
 **?panel** - Show control panel with reaction UI
