@@ -593,9 +593,16 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
         '-reconnect', '1',
         '-reconnect_streamed', '1',
         '-reconnect_delay_max', '5',
+
+        '-nostdin',
+
         '-analyzeduration', '10000000',
         '-probesize', '50000000',
+
+        '-fflags', 'nobuffer',
+
         '-i', inputUrl,
+
         '-vn'
     ];
 
