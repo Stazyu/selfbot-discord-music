@@ -599,8 +599,6 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
         '-analyzeduration', '10000000',
         '-probesize', '50000000',
 
-        '-fflags', 'nobuffer',
-
         '-i', inputUrl,
 
         '-vn'
