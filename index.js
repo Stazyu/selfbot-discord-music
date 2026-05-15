@@ -1126,17 +1126,18 @@ client.on("messageCreate", async msg => {
 
     if (!msg.member) {
         // DM: Find the user's active voice channel across all guilds
-        for (const [guildId, existingQueue] of queues) {
-            const g = client.guilds.cache.get(guildId)
-            if (!g) continue
-
-            const member = g.members.cache.get(msg.author.id)
-            if (member && member.voice.channel) {
-                guild = g
-                voice = member.voice.channel
-                queue = existingQueue
-                console.log(`[DM] Found user in voice channel: ${voice.name} in guild ${g.name}`)
-                break
+        for (const [guildId, g] of client.guilds.cache) {
+            try {
+                const member = await g.members.fetch(msg.author.id)
+                if (member.voice.channel) {
+                    guild = g
+                    voice = member.voice.channel
+                    queue = queues.get(guildId)
+                    console.log(`[DM] Found user in voice channel: ${voice.name} in guild ${g.name}`)
+                    break
+                }
+            } catch {
+                continue
             }
         }
 
