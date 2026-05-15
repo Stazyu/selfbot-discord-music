@@ -617,7 +617,7 @@ function spawnRadioFfmpeg(inputUrl, codec = null, onClose = null) {
     // Stream monitoring variables
     let streamSize = 0;
     let lastRestartTime = Date.now();
-    const MAX_STREAM_SIZE = 100 * 1024 * 1024; // 100MB limit
+    const MAX_STREAM_SIZE = 250 * 1024 * 1024; // 250MB limit
     const MIN_RESTART_INTERVAL = 5 * 60 * 1000; // 5 minutes minimum between restarts
 
     ff.on('spawn', () => console.log('[radio] ffmpeg spawned for', inputUrl));
@@ -1632,45 +1632,42 @@ client.on("messageCreate", async msg => {
     }
 
     if (cmd === "join") {
-        const voiceChannelId = args[0]
+        let voiceChannelId = args[0]
         if (!voiceChannelId) {
-            return msg.reply("Usage: ?join <voice_channel_id>")
+            if (voice) {
+                voiceChannelId = voice.id
+            } else {
+                return msg.reply("❌ Kamu tidak terdeteksi di voice channel manapun. Gunakan ?join <voice_channel_id>")
+            }
         }
 
-        // Security check for DM usage
-        // if (!msg.member) {
-        //     // DM: Only allow joining channels where user is currently in voice
-        //     let userInVoice = false
-        //     let targetGuild = null
+        // Find the voice channel by ID across all guilds (needed when guild is not set from DM)
+        let voiceChannel = null
+        if (guild) {
+            voiceChannel = guild.channels.cache.get(voiceChannelId)
+        } else {
+            for (const [, g] of client.guilds.cache) {
+                const ch = g.channels.cache.get(voiceChannelId)
+                if (ch && ch.type === 2) {
+                    voiceChannel = ch
+                    guild = g
+                    break
+                }
+            }
+        }
 
-        //     for (const [guildId, existingQueue] of queues) {
-        //         const g = client.guilds.cache.get(guildId)
-        //         if (!g) continue
-
-        //         const member = g.members.cache.get(msg.author.id)
-        //         if (member && member.voice.channel && member.voice.channel.id === voiceChannelId) {
-        //             userInVoice = true
-        //             targetGuild = g
-        //             guild = g // Update guild context
-        //             break
-        //         }
-        //     }
-
-        //     if (!userInVoice) {
-        //         return msg.reply("❌ Di DM, kamu hanya bisa join ke voice channel dimana kamu sedang berada")
-        //     }
-        // }
-
-        // Find the voice channel by ID
-        const voiceChannel = guild.channels.cache.get(voiceChannelId)
         if (!voiceChannel || voiceChannel.type !== 2) { // Voice channel type is 2
             return msg.reply("❌ Voice channel tidak ditemukan atau ID tidak valid")
         }
 
         // Additional permission check for guild messages
         if (msg.member) {
-            const member = guild.members.cache.get(msg.author.id)
-            if (!member || !member.permissionsIn(voiceChannel).has('CONNECT')) {
+            try {
+                const member = await guild.members.fetch(msg.author.id)
+                if (!member.permissionsIn(voiceChannel).has('CONNECT')) {
+                    return msg.reply("❌ Kamu tidak memiliki izin untuk join ke voice channel tersebut")
+                }
+            } catch {
                 return msg.reply("❌ Kamu tidak memiliki izin untuk join ke voice channel tersebut")
             }
         }
