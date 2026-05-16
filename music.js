@@ -1,4 +1,4 @@
-const { Client } = require("@deksdeveloper/discord.js-self-bot")
+const { Client } = require("discord.js-selfbot-v13")
 const { createPlayer } = require("./player")
 const { searchSong } = require("./yt")
 const { buildNowPlaying } = require("./ui")
