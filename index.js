@@ -1,4 +1,4 @@
-const { Client } = require("discord.js-selfbot-v13")
+const { Client } = require("selfbotsdk-discordjs")
 const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, StreamType } = require("@discordjs/voice")
 const { spawn } = require("child_process")
 const ffmpegStatic = require("ffmpeg-static")
