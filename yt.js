@@ -2,6 +2,7 @@ const { spawn } = require("child_process")
 const ffmpeg = require("ffmpeg-static")
 const YouTubeVideoId = require('youtube-video-id').default;
 const dotenv = require("dotenv")
+const path = require("path")
 
 dotenv.config();
 

@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@deksdeveloper/discord.js-self-bot": "^3.7.3",
     "@discordjs/opus": "^0.10.0",
     "@discordjs/voice": "^0.19.1",
     "discord.js-selfbot-v13": "^3.7.1",

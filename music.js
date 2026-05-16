@@ -1,4 +1,4 @@
-const { Client } = require("discord.js-selfbot-v13")
+const { Client } = require("@deksdeveloper/discord.js-self-bot")
 const { createPlayer } = require("./player")
 const { searchSong } = require("./yt")
 const { buildNowPlaying } = require("./ui")
@@ -74,9 +74,9 @@ client.on("messageCreate", async msg => {
     }
 
     if (cmd === "shuffle") {
-        if (!queue || queue.songs.length < 3) 
+        if (!queue || queue.songs.length < 3)
             return msg.channel.send("Butuh minimal 2 lagu di antrean untuk shuffle")
-        
+
         queue.shuffle()
         msg.channel.send("🔀 Queue berhasil di-shuffle!")
     }
