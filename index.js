@@ -1494,7 +1494,7 @@ client.on("messageCreate", async msg => {
         }
     }
 
-    if (cmd === "volume") {
+    if (cmd === "volume" || cmd === "vol") {
         if (!queue) return msg.reply("Tidak ada musik yang sedang diputar")
         const volArg = args[0]
         if (!volArg) return msg.reply(`Volume saat ini: **${Math.round((queue.volume ?? 1.0) * 100)}%**`)
