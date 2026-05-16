@@ -954,151 +954,153 @@ async function playRadio(guild, radioUrl, radioName) {
         return
     }
 
-    radioUrl = await fetch(radioUrl).then(res => res.url)
+    try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 5000)
+        radioUrl = await fetch(radioUrl, { signal: controller.signal }).then(res => res.url)
+        clearTimeout(timeout)
+    } catch (err) {
+        console.log(`[radio] Failed to resolve radio URL, using original: ${err.message}`)
+    }
 
     console.log("📻 Playing radio:", radioName)
 
-    if (queue.radioFfmpeg) {
-        queue.radioFfmpeg.kill()
-    }
-
-    queue.radioStopped = false
-    queue.radioUrl = radioUrl
-    queue.radioName = radioName
-    // Only reset reconnect attempts if this is not a reconnection attempt
-    if (!queue.isReconnecting) {
-        queue.radioReconnectAttempts = 0
-        queue.reconnectMessage = null
-    }
-    const MAX_RECONNECT_ATTEMPTS = 5
-
-    // Stop existing metadata detection if any
-    if (queue.metadataDetector) {
-        queue.metadataDetector.stop()
-        queue.metadataDetector = null
-    }
-
-    const codec = await detectStreamCodec(radioUrl)
-    const ff = spawnRadioFfmpeg(radioUrl, codec, (code, signal) => {
-        // Check for broken pipe indicators in exit codes and stderr detection
-        const isBrokenPipe = ((code === 32 || code === 1) && signal === null) || ff._brokenPipeDetected
-
-        // Check if this is an actual error that requires reconnection
-        // Allow code 1 if it's a broken pipe, otherwise treat as error
-        const isError = (code !== 0 && code !== null && signal !== 'SIGTERM' && signal !== 15) &&
-            (!isBrokenPipe || code === 1)
-
-        if (isError && !queue.isReconnecting) {
-            const errorType = isBrokenPipe ? "broken pipe" : "stream error"
-            console.log(`[radio] 🚨 ffmpeg closed due to ${errorType}, stopping metadata and triggering reconnect...`);
-
-            // Stop metadata detector when radio crashes
-            if (queue.metadataDetector) {
-                queue.metadataDetector.stop()
-                queue.metadataDetector = null
-                console.log('[radio] Metadata detector stopped due to radio crash');
-            }
-
-            queue.isReconnecting = true
-            queue.radioReconnectAttempts++
-            // Ensure radioStopped is false during reconnection
-            queue.radioStopped = false
-
-            // Use more attempts for broken pipe errors
-            const maxAttempts = isBrokenPipe ? MAX_RECONNECT_ATTEMPTS + 2 : MAX_RECONNECT_ATTEMPTS
-
-            if (queue.radioReconnectAttempts >= maxAttempts) {
-                const errorMsg = isBrokenPipe ?
-                    `❌ Radio stream terputus (broken pipe) setelah ${maxAttempts} percobaan reconnect. Mohon coba lagi nanti.` :
-                    `❌ Radio stream terputus setelah ${maxAttempts} percobaan reconnect. Mohon coba lagi nanti.`
-                queue.textChannel.send(errorMsg)
-                queue.radioStopped = true
-                queue.isReconnecting = false
-                return
-            }
-
-            // Use shorter delay for broken pipe to recover faster
-            const delay = isBrokenPipe ? 1500 : 3000
-            const reconnectMsg = isBrokenPipe ?
-                `� Now playing radio: **${radioName}** (Reconnecting ${queue.radioReconnectAttempts}/${maxAttempts}...)` :
-                `� Now playing radio: **${radioName}** (Reconnecting ${queue.radioReconnectAttempts}/${maxAttempts}...)`
-
-            // Edit existing radio message instead of sending new one
-            if (queue.radioMessage) {
-                queue.radioMessage.edit(reconnectMsg).catch(console.error)
-            } else {
-                queue.textChannel.send(reconnectMsg)
-            }
-
-            setTimeout(() => {
-                const currentQueue = queues.get(guild.id)
-                console.log(`[radio] 🔄 Reconnect check - Queue exists: ${!!currentQueue}, Radio stopped: ${currentQueue?.radioStopped}, Connection status: ${currentQueue?.connection?.state?.status}`)
-
-                if (currentQueue && !currentQueue.radioStopped) {
-                    console.log(`[radio] 🔄 Proceeding with radio reconnect...`)
-                    // Metadata detector will be restarted automatically when playRadio is called
-                    playRadio(guild, radioUrl, radioName)
-                } else {
-                    console.log(`[radio] ❌ Reconnect cancelled - Queue: ${!!currentQueue}, Stopped: ${currentQueue?.radioStopped}`)
-                    queue.isReconnecting = false
-                }
-            }, delay)
-        } else if (signal === 'SIGTERM' || signal === 15) {
-            console.log('[radio] ffmpeg terminated normally (SIGTERM), no reconnect needed');
-        }
-    })
-    queue.radioFfmpeg = ff
-
-    const resource = createAudioResource(ff.stdout, { inlineVolume: true, inputType: StreamType.OggOpus })
-    resource.volume.setVolume(queue.volume ?? 1.0)
-
-    queue.player.play(resource)
-
-    queue.player.on("error", async (err) => {
-        console.error("Radio player error:", err)
-    })
-
-    queue.connection.on("error", (err) => {
-        console.error("Voice connection error:", err)
-        queue.textChannel.send("❌ Error connecting to voice channel, stopping radio...")
+    try {
         if (queue.radioFfmpeg) {
             queue.radioFfmpeg.kill()
         }
-        queue.radioStopped = true
-        queue.playing = false
+
+        queue.radioStopped = false
+        queue.radioUrl = radioUrl
+        queue.radioName = radioName
+        if (!queue.isReconnecting) {
+            queue.radioReconnectAttempts = 0
+            queue.reconnectMessage = null
+        }
+        const MAX_RECONNECT_ATTEMPTS = 5
+
+        if (queue.metadataDetector) {
+            queue.metadataDetector.stop()
+            queue.metadataDetector = null
+        }
+
+        const codec = await detectStreamCodec(radioUrl)
+        const ff = spawnRadioFfmpeg(radioUrl, codec, (code, signal) => {
+            const isBrokenPipe = ((code === 32 || code === 1) && signal === null) || ff._brokenPipeDetected
+            const isError = (code !== 0 && code !== null && signal !== 'SIGTERM' && signal !== 15) &&
+                (!isBrokenPipe || code === 1)
+
+            if (isError && !queue.isReconnecting) {
+                const errorType = isBrokenPipe ? "broken pipe" : "stream error"
+                console.log(`[radio] 🚨 ffmpeg closed due to ${errorType}, stopping metadata and triggering reconnect...`);
+
+                if (queue.metadataDetector) {
+                    queue.metadataDetector.stop()
+                    queue.metadataDetector = null
+                    console.log('[radio] Metadata detector stopped due to radio crash');
+                }
+
+                queue.isReconnecting = true
+                queue.radioReconnectAttempts++
+                queue.radioStopped = false
+
+                const maxAttempts = isBrokenPipe ? MAX_RECONNECT_ATTEMPTS + 2 : MAX_RECONNECT_ATTEMPTS
+
+                if (queue.radioReconnectAttempts >= maxAttempts) {
+                    const errorMsg = isBrokenPipe ?
+                        `❌ Radio stream terputus (broken pipe) setelah ${maxAttempts} percobaan reconnect. Mohon coba lagi nanti.` :
+                        `❌ Radio stream terputus setelah ${maxAttempts} percobaan reconnect. Mohon coba lagi nanti.`
+                    queue.textChannel.send(errorMsg)
+                    queue.radioStopped = true
+                    queue.isReconnecting = false
+                    return
+                }
+
+                const delay = isBrokenPipe ? 1500 : 3000
+                const reconnectMsg = isBrokenPipe ?
+                    `� Now playing radio: **${radioName}** (Reconnecting ${queue.radioReconnectAttempts}/${maxAttempts}...)` :
+                    `� Now playing radio: **${radioName}** (Reconnecting ${queue.radioReconnectAttempts}/${maxAttempts}...)`
+
+                if (queue.radioMessage) {
+                    queue.radioMessage.edit(reconnectMsg).catch(console.error)
+                } else {
+                    queue.textChannel.send(reconnectMsg)
+                }
+
+                setTimeout(() => {
+                    const currentQueue = queues.get(guild.id)
+                    console.log(`[radio] 🔄 Reconnect check - Queue exists: ${!!currentQueue}, Radio stopped: ${currentQueue?.radioStopped}, Connection status: ${currentQueue?.connection?.state?.status}`)
+
+                    if (currentQueue && !currentQueue.radioStopped) {
+                        console.log(`[radio] 🔄 Proceeding with radio reconnect...`)
+                        playRadio(guild, radioUrl, radioName)
+                    } else {
+                        console.log(`[radio] ❌ Reconnect cancelled - Queue: ${!!currentQueue}, Stopped: ${currentQueue?.radioStopped}`)
+                        queue.isReconnecting = false
+                    }
+                }, delay)
+            } else if (signal === 'SIGTERM' || signal === 15) {
+                console.log('[radio] ffmpeg terminated normally (SIGTERM), no reconnect needed');
+            }
+        })
+        queue.radioFfmpeg = ff
+
+        const resource = createAudioResource(ff.stdout, { inlineVolume: true, inputType: StreamType.OggOpus })
+        resource.volume.setVolume(queue.volume ?? 1.0)
+        queue.player.play(resource)
+
+        queue.player.on("error", async (err) => {
+            console.error("Radio player error:", err)
+        })
+
+        queue.connection.on("error", (err) => {
+            console.error("Voice connection error:", err)
+            queue.textChannel.send("❌ Error connecting to voice channel, stopping radio...")
+            if (queue.radioFfmpeg) {
+                queue.radioFfmpeg.kill()
+            }
+            queue.radioStopped = true
+            queue.playing = false
+            queue.isReconnecting = false
+            queue.radioReconnectAttempts = 0
+            queues.delete(guild.id)
+            saveState()
+        })
+
+        if (queue.radioMessage && queue.isReconnecting) {
+            queue.radioMessage.edit(`📻 Now playing radio: **${radioName}**`).catch(console.error)
+        } else {
+            const radioMsg = await queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
+            queue.radioMessage = radioMsg
+        }
+
+        if (queue.reconnectMessage) {
+            queue.reconnectMessage.edit("✅ Berhasil reconnect radio").catch(console.error)
+            queue.reconnectMessage = null
+        }
+
         queue.isReconnecting = false
-        queue.radioReconnectAttempts = 0
-        queues.delete(guild.id)
+        queue.playing = true
+
+        setTimeout(() => {
+            queue.metadataDetector = startRadioMetadataDetection(radioUrl, queue)
+        }, 2000)
+
         saveState()
-    })
-
-    if (queue.radioMessage && queue.isReconnecting) {
-        // Edit existing radio message if reconnecting
-        queue.radioMessage.edit(`📻 Now playing radio: **${radioName}**`).catch(console.error)
-    } else {
-        // Send new radio message if first time or no existing message
-        const radioMsg = await queue.textChannel.send(`📻 Now playing radio: **${radioName}**`)
-        queue.radioMessage = radioMsg
-        // queue.reactionCollector = createReactionUI(radioMsg, queue)
+    } catch (err) {
+        console.error(`[radio] Unexpected error in playRadio: ${err.message}`)
+        if (queue && !queue.radioStopped && !queue.isReconnecting) {
+            queue.isReconnecting = true
+            queue.radioReconnectAttempts = (queue.radioReconnectAttempts || 0) + 1
+            const delay = 3000
+            setTimeout(() => {
+                const currentQueue = queues.get(guild.id)
+                if (currentQueue && !currentQueue.radioStopped) {
+                    playRadio(guild, radioUrl, radioName)
+                }
+            }, delay)
+        }
     }
-
-    if (queue.reconnectMessage) {
-        queue.reconnectMessage.edit("✅ Berhasil reconnect radio").catch(console.error)
-        queue.reconnectMessage = null
-    }
-
-    // Reset reconnecting flag after successful reconnect
-    queue.isReconnecting = false
-
-    // Set playing state for radio
-    queue.playing = true
-
-    // Start metadata detection for current song (with small delay to ensure message is set)
-    setTimeout(() => {
-        queue.metadataDetector = startRadioMetadataDetection(radioUrl, queue)
-    }, 2000)
-
-    saveState()
 }
 
 client.on("messageCreate", async msg => {
