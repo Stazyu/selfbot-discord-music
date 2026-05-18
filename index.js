@@ -106,7 +106,7 @@ function saveState() {
             radioUrl: queue.radioUrl,
             radioName: queue.radioName,
             radioStopped: queue.radioStopped,
-            textChannelId: queue.voiceChannelId,
+            textChannelId: queue.textChannel?.id,
             playHistory: queue.playHistory || [],
             loopMode: queue.loopMode || 0,
             playing: queue.playing || false,
