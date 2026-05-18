@@ -838,10 +838,10 @@ async function playSong(guild, song) {
     queue.connection.on("error", (err) => {
         console.error("Voice connection error:", err)
         queue.textChannel.send("❌ Error connecting to voice channel, stopping music...")
-        queue.songs = []
+        // queue.songs = []
         queue.player.stop()
-        queues.delete(guild.id)
-        saveState()
+        // queues.delete(guild.id)
+        // saveState()
     })
 
     const nowPlayingMsg = await queue.textChannel.send(`🎵 Now playing **${song.title}** 🎵`)
@@ -1063,7 +1063,6 @@ async function playRadio(guild, radioUrl, radioName) {
             queue.playing = false
             queue.isReconnecting = false
             queue.radioReconnectAttempts = 0
-            queues.delete(guild.id)
             saveState()
         })
 
