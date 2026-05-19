@@ -162,7 +162,7 @@ client.on("ready", async () => {
                 continue
             }
 
-            const textChannel = client.channels.cache.get(guildState.textChannelId)
+            const textChannel = client.channels.cache.get(guildState.voiceChannelId)
             console.log(`📝 Found voice channel: ${voiceChannel.name} (${voiceChannel.id})`)
 
             try {
@@ -792,6 +792,7 @@ async function playSong(guild, song) {
 
     // Add error handling for ffmpeg processes
     audio.processes.ytdlp.on("error", (err) => {
+        if (queue.currentProcesses?.ytdlp !== audio.processes.ytdlp) return
         console.error("yt-dlp error:", err)
         if (!queue.isMusicReconnecting && !queue.radioStopped) {
             handleMusicStreamingError(guild, song, "yt-dlp", err)
@@ -799,6 +800,7 @@ async function playSong(guild, song) {
     })
 
     audio.processes.ff.on("error", (err) => {
+        if (queue.currentProcesses?.ff !== audio.processes.ff) return
         console.error("ffmpeg error:", err)
         if (!queue.isMusicReconnecting && !queue.radioStopped) {
             handleMusicStreamingError(guild, song, "ffmpeg", err)
@@ -806,6 +808,7 @@ async function playSong(guild, song) {
     })
 
     audio.processes.ytdlp.on("close", (code) => {
+        if (queue.currentProcesses?.ytdlp !== audio.processes.ytdlp) return
         if (code !== 0 && code !== null && !queue.isMusicReconnecting && !queue.radioStopped) {
             console.error("yt-dlp exited with code:", code)
             const error = new Error(`yt-dlp exited with code ${code}`)
@@ -815,6 +818,7 @@ async function playSong(guild, song) {
     })
 
     audio.processes.ff.on("close", (code) => {
+        if (queue.currentProcesses?.ff !== audio.processes.ff) return
         if (code !== 0 && code !== null && !queue.isMusicReconnecting && !queue.radioStopped) {
             console.error("ffmpeg exited with code:", code)
             const error = new Error(`ffmpeg exited with code ${code}`)
@@ -830,6 +834,7 @@ async function playSong(guild, song) {
     queue.connection.removeAllListeners("error")
 
     queue.player.on("error", (err) => {
+        if (queue.currentProcesses !== audio.processes) return
         console.error("Audio player error:", err)
         if (!queue.isMusicReconnecting && !queue.radioStopped) {
             handleMusicStreamingError(guild, song, "player", err)
@@ -880,6 +885,9 @@ async function playSong(guild, song) {
 function handleMusicStreamingError(guild, song, source, error = null) {
     const queue = queues.get(guild.id)
     if (!queue) return
+
+    // Ignore if this song is no longer the current song (already skipped)
+    if (queue.songs[0] && queue.songs[0].url !== song.url) return
 
     // Log detailed error information
     console.log(`[music] 🚨 ${source} failed, attempting reconnect...`)

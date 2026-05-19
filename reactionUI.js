@@ -109,7 +109,7 @@ async function createReactionUI(message, queue) {
                 break
 
             case "⏭":
-
+                queue.isSkipping = true
                 if (queue.currentProcesses) {
                     queue.currentProcesses.ytdlp.kill()
                     queue.currentProcesses.ff.kill()
@@ -268,6 +268,7 @@ async function createCommandPanel(message, queue) {
 
             case "⏭":
                 // Skip
+                queue.isSkipping = true
                 if (queue.currentProcesses) {
                     queue.currentProcesses.ytdlp.kill()
                     queue.currentProcesses.ff.kill()
