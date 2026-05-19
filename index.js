@@ -99,10 +99,21 @@ const STATE_FILE = process.env.STATE_FILE || path.join(__dirname, "state.json")
 function saveState() {
     const state = {}
     for (const [guildId, queue] of queues) {
+        let songs = queue.songs
+
+        if (queue.playing && queue.currentSong && !queue.currentSong.isRadio && queue.songs.length > 0) {
+            const startedAt = new Date(queue.currentSong.startedAt)
+            const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000)
+            songs = queue.songs.map((s, i) => {
+                if (i === 0) return { ...s, resumeFrom: elapsedSeconds }
+                return s
+            })
+        }
+
         state[guildId] = {
             voiceChannelId: queue.voiceChannelId,
             volume: queue.volume ?? 1.0,
-            songs: queue.songs,
+            songs: songs,
             radioUrl: queue.radioUrl,
             radioName: queue.radioName,
             radioStopped: queue.radioStopped,
@@ -205,7 +216,9 @@ client.on("ready", async () => {
                     setTimeout(() => playRadio(guild, guildState.radioUrl, guildState.radioName), 3000)
                 } else if (guildState.songs && guildState.songs.length > 0) {
                     console.log(`🔄 Resuming music queue on startup - ${queue.songs.length} songs`)
-                    queue.textChannel?.send("🔄 Resuming music after startup...")
+                    const resumeFrom = guildState.songs[0]?.resumeFrom
+                    const posStr = resumeFrom ? ` (${Math.floor(resumeFrom / 60)}:${(resumeFrom % 60).toString().padStart(2, '0')})` : ''
+                    queue.textChannel?.send(`🔄 Resuming music after startup${posStr}...`)
                     setTimeout(() => playSong(guild, guildState.songs[0]), 3000)
                 } else {
                     console.log(`ℹ️ No active playback to resume for guild ${guildId}`)
@@ -340,7 +353,15 @@ async function resumeAllMusic() {
             } else if (queue.songs.length > 0) {
                 voiceChannel.send("Test message")
                 console.log(`🔄 Resuming music queue - ${queue.songs.length} songs`)
-                queue.textChannel?.send("🔄 Resuming music after deployment...")
+                let posStr = ''
+                if (queue.playing && queue.currentSong && !queue.currentSong.isRadio) {
+                    const startedAt = new Date(queue.currentSong.startedAt)
+                    const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000)
+                    queue.songs[0].resumeFrom = elapsedSeconds
+                    posStr = ` (${Math.floor(elapsedSeconds / 60)}:${(elapsedSeconds % 60).toString().padStart(2, '0')})`
+                    console.log(`🔄 Resuming from ${elapsedSeconds}s for "${queue.currentSong.title}"`)
+                }
+                queue.textChannel?.send(`🔄 Resuming music after deployment${posStr}...`)
                 setTimeout(() => playSong(guild, queue.songs[0]), 2000)
                 resumedCount++
             } else {
@@ -364,7 +385,7 @@ client.on("voiceStateUpdate", (oldState, newState) => {
         console.log("⚠️ Bot was kicked from voice channel")
         const queue = queues.get(oldState.guild.id)
         if (queue) {
-            // Calculate playback time for resume functionality
+            let posStr = ''
             if (queue.currentSong && !queue.currentSong.isRadio) {
                 const startedAt = new Date(queue.currentSong.startedAt)
                 const currentTime = new Date()
@@ -373,12 +394,13 @@ client.on("voiceStateUpdate", (oldState, newState) => {
                 // Add resume time to the current song
                 if (queue.songs && queue.songs.length > 0 && queue.songs[0]) {
                     queue.songs[0].resumeFrom = elapsedSeconds
-                    console.log(`💾 Saved resume time: ${elapsedSeconds} seconds for "${queue.currentSong.title}"`)
+                    posStr = ` (${Math.floor(elapsedSeconds / 60)}:${(elapsedSeconds % 60).toString().padStart(2, '0')})`
+                    console.log(`💾 Saved resume time: ${elapsedSeconds}s${posStr} for "${queue.currentSong.title}"`)
                 }
             }
 
             queue.voiceChannelId = oldState.channel.id
-            queue.textChannel?.send("⚠️ Bot terkick dari VC, mencoba rejoin dalam 5 detik...").catch(err => {
+            queue.textChannel?.send(`⚠️ Bot terkick dari VC${posStr}, mencoba rejoin dalam 5 detik...`).catch(err => {
                 if (err.code === 50001) {
                     console.error('[voice-state] Missing Access: Bot tidak memiliki izin untuk mengirim pesan ke channel setelah terkick dari VC')
                 } else {
@@ -856,7 +878,8 @@ async function playSong(guild, song) {
         // saveState()
     })
 
-    const nowPlayingMsg = await queue.textChannel.send(`🎵 Now playing **${song.title}** 🎵`)
+    const durStr = song.durationFormatted ? ` [${song.durationFormatted}]` : (song.duration ? ` [${Math.floor(song.duration / 60)}:${(song.duration % 60).toString().padStart(2, '0')}]` : '')
+    const nowPlayingMsg = await queue.textChannel.send(`🎵 Now playing **${song.title}**${durStr} 🎵`)
     // queue.reactionCollector = createReactionUI(nowPlayingMsg, queue)
     saveState()
 
@@ -1843,7 +1866,7 @@ client.on("messageCreate", async msg => {
                 stateMsg += `   🔊 **Volume:** ${Math.round((queue.volume ?? 1.0) * 100)}%\n`
 
                 // Show currently playing with duration and current time
-                if (queue.songs && queue.songs.length > 0 && !queue.radioStopped) {
+                if (queue.songs && queue.songs.length > 0 && queue.radioStopped) {
                     const currentSong = queue.songs[0]
                     let nowPlayingInfo = `🎶 **Now Playing:** ${currentSong?.title || 'Unknown Song'}`
 
