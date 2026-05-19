@@ -334,6 +334,7 @@ async function resumeAllMusic() {
                 setTimeout(() => playRadio(guild, queue.radioUrl, queue.radioName), 3000)
                 resumedCount++
             } else if (queue.songs.length > 0) {
+                voiceChannel.send("Test message")
                 console.log(`🔄 Resuming music queue - ${queue.songs.length} songs`)
                 queue.textChannel?.send("🔄 Resuming music after deployment...")
                 setTimeout(() => playSong(guild, queue.songs[0]), 2000)
@@ -1148,6 +1149,11 @@ client.on("messageCreate", async msg => {
         voice = msg.member.voice.channel
         if (!voice) return msg.reply("Join VC dulu")
         queue = queues.get(guild.id)
+    }
+
+    if (cmd === "test") {
+        console.log("Test : ", msg)
+        return msg.reply("Test command working!")
     }
 
     if (cmd === "play") {
