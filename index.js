@@ -316,7 +316,9 @@ async function resumeAllMusic() {
             const connection = joinVoiceChannel({
                 channelId: voiceChannel.id,
                 guildId: guild.id,
-                adapterCreator: guild.voiceAdapterCreator
+                adapterCreator: guild.voiceAdapterCreator,
+                selfDeaf: false,
+                selfMute: false
             })
 
             connection.subscribe(queue.player)
@@ -392,7 +394,9 @@ client.on("voiceStateUpdate", (oldState, newState) => {
                             const connection = joinVoiceChannel({
                                 channelId: voiceChannel.id,
                                 guildId: guild.id,
-                                adapterCreator: guild.voiceAdapterCreator
+                                adapterCreator: guild.voiceAdapterCreator,
+                                selfDeaf: false,
+                                selfMute: false
                             })
                             connection.subscribe(queue.player)
                             queue.connection = connection
@@ -1274,7 +1278,9 @@ client.on("messageCreate", async msg => {
             const connection = joinVoiceChannel({
                 channelId: voice.id,
                 guildId: guild.id,
-                adapterCreator: guild.voiceAdapterCreator
+                adapterCreator: guild.voiceAdapterCreator,
+                selfDeaf: false,
+                selfMute: false
             })
 
             const player = createAudioPlayer()
@@ -1464,7 +1470,9 @@ client.on("messageCreate", async msg => {
                 const connection = joinVoiceChannel({
                     channelId: voice.id,
                     guildId: guild.id,
-                    adapterCreator: guild.voiceAdapterCreator
+                    adapterCreator: guild.voiceAdapterCreator,
+                    selfDeaf: false,
+                    selfMute: false
                 })
 
                 const player = createAudioPlayer()
@@ -1625,7 +1633,9 @@ client.on("messageCreate", async msg => {
             const connection = joinVoiceChannel({
                 channelId: voice.id,
                 guildId: guild.id,
-                adapterCreator: guild.voiceAdapterCreator
+                adapterCreator: guild.voiceAdapterCreator,
+                selfDeaf: false,
+                selfMute: false
             })
 
             connection.subscribe(queue.player)
@@ -1699,7 +1709,9 @@ client.on("messageCreate", async msg => {
             const connection = joinVoiceChannel({
                 channelId: voiceChannel.id,
                 guildId: guild.id,
-                adapterCreator: guild.voiceAdapterCreator
+                adapterCreator: guild.voiceAdapterCreator,
+                selfDeaf: false,
+                selfMute: false
             })
 
             const player = createAudioPlayer()
