@@ -169,7 +169,9 @@ client.on("ready", async () => {
                 const connection = joinVoiceChannel({
                     channelId: voiceChannel.id,
                     guildId: guild.id,
-                    adapterCreator: guild.voiceAdapterCreator
+                    adapterCreator: guild.voiceAdapterCreator,
+                    selfDeaf: false,
+                    selfMute: false
                 })
 
                 const player = createAudioPlayer()
