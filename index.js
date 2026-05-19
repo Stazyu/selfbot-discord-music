@@ -497,7 +497,11 @@ function stream(url, seekTime = null) {
 
     // Add seek parameter if provided
     if (seekTime) {
-        ytdlpArgs.push("-ss", seekTime.toString())
+        const hh = Math.floor(seekTime / 3600)
+        const mm = Math.floor((seekTime % 3600) / 60)
+        const ss = Math.floor(seekTime % 60)
+        const seekStr = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+        ytdlpArgs.push("--download-sections", `*${seekStr}-`)
     }
 
     ytdlpArgs.push(url)
@@ -762,14 +766,6 @@ async function playSong(guild, song) {
     // Set playing state
     queue.playing = true
 
-    // Track playback start time for resume functionality
-    queue.currentSong = {
-        title: song.title,
-        url: song.url,
-        startedAt: new Date().toISOString(),
-        isRadio: false
-    }
-
     // Add to play history
     if (!queue.playHistory) {
         queue.playHistory = []
@@ -796,6 +792,18 @@ async function playSong(guild, song) {
         seekTime = song.resumeFrom
         console.log(`🔄 Resuming from ${seekTime} seconds`)
         delete song.resumeFrom // Clean up the resume flag
+    }
+
+    // Track playback start time for resume functionality
+    // Offset startedAt by seekTime so saveState() calculates correct elapsed position
+    const startedAt = seekTime
+        ? new Date(Date.now() - seekTime * 1000).toISOString()
+        : new Date().toISOString()
+    queue.currentSong = {
+        title: song.title,
+        url: song.url,
+        startedAt,
+        isRadio: false
     }
 
     const audio = stream(song.url, seekTime)
