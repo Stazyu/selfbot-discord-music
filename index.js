@@ -891,7 +891,20 @@ async function playSong(guild, song) {
     // queue.reactionCollector = createReactionUI(nowPlayingMsg, queue)
     saveState()
 
+    // Periodic state save while song plays to keep resumeFrom accurate
+    if (queue._saveInterval) clearInterval(queue._saveInterval)
+    queue._saveInterval = setInterval(() => {
+        if (queue.playing && queue.currentSong && !queue.currentSong.isRadio) {
+            saveState()
+        }
+    }, 15000)
+
     queue.player.once(AudioPlayerStatus.Idle, () => {
+        if (queue._saveInterval) {
+            clearInterval(queue._saveInterval)
+            queue._saveInterval = null
+        }
+
         if (queue.currentProcesses) {
             queue.currentProcesses.ytdlp.kill()
             queue.currentProcesses.ff.kill()
@@ -1105,6 +1118,11 @@ async function playRadio(guild, radioUrl, radioName) {
             if (queue.radioFfmpeg) {
                 queue.radioFfmpeg.kill()
             }
+            if (queue._saveInterval) {
+                clearInterval(queue._saveInterval)
+                queue._saveInterval = null
+            }
+
             queue.radioStopped = true
             queue.playing = false
             queue.isReconnecting = false
