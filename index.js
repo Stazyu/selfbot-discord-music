@@ -910,12 +910,17 @@ async function playSong(guild, song) {
             queue.currentProcesses.ff.kill()
         }
 
+        // Don't advance queue if reconnection is in progress
+        if (queue.isMusicReconnecting) {
+            queue.playing = false
+            return
+        }
+
         // Reset playing state temporarily before next song
         queue.playing = false
 
         // Reset music reconnection tracking on successful playback
         queue.musicReconnectAttempts = 0
-        queue.isMusicReconnecting = false
         queue.musicReconnectMessage = null
 
         if (queue.isSkipping || (queue.loopMode || 0) === 0) {
@@ -996,9 +1001,20 @@ function handleMusicStreamingError(guild, song, source, error = null) {
     setTimeout(() => {
         const currentQueue = queues.get(guild.id)
         if (currentQueue && !currentQueue.radioStopped && currentQueue.connection.state.status === "ready") {
-            console.log(`[music] Attempting to reconnect to: ${song.title}`)
-            queue.isMusicReconnecting = false
-            playSong(guild, song)
+            // Only reconnect if this song is still the current song in queue
+            if (currentQueue.songs[0] && currentQueue.songs[0].url === song.url) {
+                console.log(`[music] Attempting to reconnect to: ${song.title}`)
+                queue.isMusicReconnecting = false
+                playSong(guild, song)
+            } else {
+                // Song was already shifted (next song played), cancel reconnect
+                queue.isMusicReconnecting = false
+                queue.musicReconnectAttempts = 0
+                if (queue.musicReconnectMessage) {
+                    queue.musicReconnectMessage.delete().catch(() => {})
+                    queue.musicReconnectMessage = null
+                }
+            }
         } else {
             queue.isMusicReconnecting = false
         }
