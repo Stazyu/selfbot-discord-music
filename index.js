@@ -96,7 +96,7 @@ const TOKEN = config.token
 const queues = new Map()
 const STATE_FILE = process.env.STATE_FILE || path.join(__dirname, "state.json")
 
-function saveState() {
+function saveState(stateLog = true) {
     const state = {}
     for (const [guildId, queue] of queues) {
         let songs = queue.songs
@@ -127,7 +127,9 @@ function saveState() {
     }
     try {
         fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2))
-        console.log(" State saved to", STATE_FILE)
+        if (stateLog) {
+            console.log(" State saved to", STATE_FILE)
+        }
     } catch (err) {
         console.error("Error saving state:", err)
     }
@@ -895,7 +897,7 @@ async function playSong(guild, song) {
     if (queue._saveInterval) clearInterval(queue._saveInterval)
     queue._saveInterval = setInterval(() => {
         if (queue.playing && queue.currentSong && !queue.currentSong.isRadio) {
-            saveState()
+            saveState(false)
         }
     }, 15000)
 
@@ -1011,7 +1013,7 @@ function handleMusicStreamingError(guild, song, source, error = null) {
                 queue.isMusicReconnecting = false
                 queue.musicReconnectAttempts = 0
                 if (queue.musicReconnectMessage) {
-                    queue.musicReconnectMessage.delete().catch(() => {})
+                    queue.musicReconnectMessage.delete().catch(() => { })
                     queue.musicReconnectMessage = null
                 }
             }
