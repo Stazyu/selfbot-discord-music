@@ -1553,7 +1553,7 @@ client.on("messageCreate", async msg => {
                     textChannel: playbackChannel,
                     connection,
                     player,
-                    songs: [],
+                    songs: queue.songs,
                     radioFfmpeg: null,
                     voiceChannelId: voice.id,
                     volume: 1.0,
@@ -1572,7 +1572,7 @@ client.on("messageCreate", async msg => {
                 console.log("📻 Preserving existing volume and playHistory for radio")
             }
 
-            queue.songs = []
+            // queue.songs = []
             if (queue.currentProcesses) {
                 queue.currentProcesses.ytdlp.kill()
                 queue.currentProcesses.ff.kill()
