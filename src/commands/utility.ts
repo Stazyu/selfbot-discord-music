@@ -207,28 +207,43 @@ async function handleSync(msg: Message, args: string[], guild: Guild, voice: Voi
 }
 
 async function handleJoin(msg: Message, args: string[], guildIn: Guild | undefined, voiceIn: VoiceChannel | null, queue: Queue | undefined): Promise<void> {
-  let voiceChannelId = args[0]
-  if (!voiceChannelId) {
-    if (voiceIn) {
-      voiceChannelId = voiceIn.id
-    } else {
-      msg.reply("❌ Kamu tidak terdeteksi di voice channel manapun. Gunakan ?join <voice_channel_id>")
-      return
-    }
-  }
-
   let voiceChannel: VoiceChannel | undefined
   let guild = guildIn
 
-  if (guild) {
-    voiceChannel = guild.channels.cache.get(voiceChannelId) as VoiceChannel | undefined
+  if (voiceIn) {
+    voiceChannel = voiceIn
+    if (!guild) guild = voiceIn.guild
   } else {
-    for (const [, g] of msg.client.guilds.cache) {
-      const ch = g.channels.cache.get(voiceChannelId)
-      if (ch && Number(ch.type) === 2) {
-        voiceChannel = ch as VoiceChannel
-        guild = g
-        break
+    const voiceChannelId = args[0]
+    if (!voiceChannelId) {
+      msg.reply("❌ Kamu tidak terdeteksi di voice channel manapun. Gunakan ?join <voice_channel_id>")
+      return
+    }
+
+    if (guild) {
+      voiceChannel = guild.channels.cache.get(voiceChannelId) as VoiceChannel | undefined
+      if (!voiceChannel) {
+        try {
+          const fetched = await guild.channels.fetch(voiceChannelId)
+          voiceChannel = fetched as VoiceChannel
+        } catch {}
+      }
+    } else {
+      for (const [, g] of msg.client.guilds.cache) {
+        const ch = g.channels.cache.get(voiceChannelId)
+        if (ch && Number(ch.type) === 2) {
+          voiceChannel = ch as VoiceChannel
+          guild = g
+          break
+        }
+        try {
+          const fetched = await g.channels.fetch(voiceChannelId)
+          if (fetched && Number(fetched.type) === 2) {
+            voiceChannel = fetched as VoiceChannel
+            guild = g
+            break
+          }
+        } catch {}
       }
     }
   }
