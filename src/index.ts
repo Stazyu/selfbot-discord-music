@@ -7,6 +7,7 @@ import { handleMessageCreate } from "./commands"
 import { setPlaySongFunction, setPlayRadioFunction } from "./ui/reactions"
 import { joinVoiceChannel, createAudioPlayer } from "@discordjs/voice"
 import { Queue } from "./types"
+import { sendToTextChannel } from "./utils/send"
 
 const client = new Client()
 setClient(client)
@@ -87,7 +88,9 @@ client.on("ready", async () => {
           radioFfmpeg: null,
           reactionCollector: null,
           panelCollector: null,
-          reconnectMessage: null
+          reconnectMessage: null,
+          silent: (gs.silent as boolean) || false,
+          userId: (gs.userId as string) || null
         }
         queues.set(guildId, queue)
 
@@ -95,14 +98,14 @@ client.on("ready", async () => {
 
         if (gs.radioUrl && gs.radioName && !gs.radioStopped) {
           console.log(`🔄 Resuming radio on startup: ${gs.radioName}`)
-          queue.textChannel?.send("🔄 Reconnecting to radio after startup...")
+          sendToTextChannel(queue, "🔄 Reconnecting to radio after startup...")
           setTimeout(() => playRadio(guild, gs.radioUrl as string, gs.radioName as string), 3000)
         } else if (gs.songs && (gs.songs as any[]).length > 0) {
           console.log(`🔄 Resuming music queue on startup - ${queue.songs.length} songs`)
           const songs = gs.songs as Array<Record<string, unknown>>
           const resumeFrom = songs[0]?.resumeFrom as number | undefined
           const posStr = resumeFrom ? ` (${Math.floor(resumeFrom / 60)}:${(resumeFrom % 60).toString().padStart(2, "0")})` : ""
-          queue.textChannel?.send(`🔄 Resuming music after startup${posStr}...`)
+          sendToTextChannel(queue, `🔄 Resuming music after startup${posStr}...`)
           setTimeout(() => playSong(guild, queue.songs[0]), 3000)
         } else {
           console.log(`ℹ️ No active playback to resume for guild ${guildId}`)

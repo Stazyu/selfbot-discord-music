@@ -4,6 +4,7 @@ import { Readable } from "stream"
 import config from "../config"
 import { queues, saveState } from "./queue"
 import { Song, Processes } from "../types"
+import { sendToTextChannel } from "../utils/send"
 
 interface StreamWithProcesses extends Readable {
   processes: Processes
@@ -85,7 +86,7 @@ function handleMusicStreamingError(guild: any, song: Song, source: string, error
       ? `❌ Musik terputus (broken pipe) setelah ${MAX_MUSIC_RECONNECT_ATTEMPTS} percobaan reconnect. Melanjutkan ke lagu berikutnya...`
       : `❌ Musik gagal diputar setelah ${MAX_MUSIC_RECONNECT_ATTEMPTS} percobaan reconnect. Melanjutkan ke lagu berikutnya...`
 
-    queue.textChannel?.send(errorMsg)
+    sendToTextChannel(queue, errorMsg)
     queue.musicReconnectAttempts = 0
     queue.isMusicReconnecting = false
     queue.musicReconnectMessage = null
@@ -103,7 +104,7 @@ function handleMusicStreamingError(guild: any, song: Song, source: string, error
   if (queue.musicReconnectMessage) {
     queue.musicReconnectMessage.edit(reconnectText).catch(console.error)
   } else {
-    queue.textChannel?.send(reconnectText).then((msg) => {
+    sendToTextChannel(queue, reconnectText).then((msg) => {
       queue.musicReconnectMessage = msg
     }).catch(console.error)
   }
@@ -152,11 +153,11 @@ async function playSong(guild: any, song: Song | undefined): Promise<void> {
     }
     if (queue.radioUrl && queue.radioName) {
       queue.radioStopped = false
-      queue.textChannel?.send("✅ Musik selesai, kembali ke radio...")
+      sendToTextChannel(queue, "✅ Musik selesai, kembali ke radio...")
       playRadio(guild, queue.radioUrl, queue.radioName)
       return
     }
-    queue.textChannel?.send("✅ Selesai memutar semua lagu")
+    sendToTextChannel(queue, "✅ Selesai memutar semua lagu")
     return
   }
 
@@ -254,7 +255,7 @@ async function playSong(guild: any, song: Song | undefined): Promise<void> {
 
   queue.connection?.on("error", (err: Error) => {
     console.error("Voice connection error:", err)
-    queue.textChannel?.send("❌ Error connecting to voice channel, stopping music...")
+    sendToTextChannel(queue, "❌ Error connecting to voice channel, stopping music...")
     queue.player.stop()
   })
 
@@ -263,7 +264,7 @@ async function playSong(guild: any, song: Song | undefined): Promise<void> {
     : song.duration
       ? ` [${Math.floor(song.duration / 60)}:${(song.duration % 60).toString().padStart(2, "0")}]`
       : ""
-  await queue.textChannel?.send(`🎵 Now playing **${song.title}**${durStr} 🎵`)
+  await sendToTextChannel(queue, `🎵 Now playing **${song.title}**${durStr} 🎵`)
   saveState()
 
   if (queue._saveInterval) clearInterval(queue._saveInterval)
@@ -373,7 +374,7 @@ async function playRadio(guild: any, radioUrl: string, radioName: string): Promi
           const errorMsg = isBrokenPipe
             ? `❌ Radio stream terputus (broken pipe) setelah ${maxAttempts} percobaan reconnect. Mohon coba lagi nanti.`
             : `❌ Radio stream terputus setelah ${maxAttempts} percobaan reconnect. Mohon coba lagi nanti.`
-          queue.textChannel?.send(errorMsg)
+          sendToTextChannel(queue, errorMsg)
           queue.radioStopped = true
           queue.isReconnecting = false
           return
@@ -385,7 +386,7 @@ async function playRadio(guild: any, radioUrl: string, radioName: string): Promi
         if (queue.radioMessage) {
           queue.radioMessage.edit(reconnectMsg).catch(console.error)
         } else {
-          queue.textChannel?.send(reconnectMsg)
+          sendToTextChannel(queue, reconnectMsg)
         }
 
         setTimeout(() => {
@@ -416,7 +417,7 @@ async function playRadio(guild: any, radioUrl: string, radioName: string): Promi
 
     queue.connection?.on("error", (err: Error) => {
       console.error("Voice connection error:", err)
-      queue.textChannel?.send("❌ Error connecting to voice channel, stopping radio...").catch(() => {})
+      sendToTextChannel(queue, "❌ Error connecting to voice channel, stopping radio...")
       if (queue.radioFfmpeg) queue.radioFfmpeg.kill()
       if (queue._saveInterval) {
         clearInterval(queue._saveInterval)
@@ -433,7 +434,7 @@ async function playRadio(guild: any, radioUrl: string, radioName: string): Promi
       queue.radioMessage.edit(`📻 Now playing radio: **${radioName}**`).catch(console.error)
     } else {
       try {
-        const radioMsg = await queue.textChannel?.send(`📻 Now playing radio: **${radioName}**`)
+        const radioMsg = await sendToTextChannel(queue, `📻 Now playing radio: **${radioName}**`)
         queue.radioMessage = radioMsg || undefined
       } catch (sendErr) {
         console.error(`[radio] Failed to send radio message: ${(sendErr as Error).message}`)

@@ -7,6 +7,7 @@ import { searchSong } from "../services/youtube"
 import { formatDuration } from "../utils/format"
 import config from "../config"
 import { Queue, PlaylistVideoEntry, Song } from "../types"
+import { sendMsg } from "../utils/send"
 
 interface PlaylistJSON {
   entries: Array<{
@@ -57,7 +58,7 @@ async function handlePlay(msg: Message, args: string[], guild: Guild, voice: Voi
   const query = args.join(" ")
 
   if (!query) {
-    msg.reply("Usage: ?play <song name, URL, or multiple URLs separated by space>")
+    await sendMsg(msg, queue, "Usage: ?play <song name, URL, or multiple URLs separated by space>")
     return
   }
 
@@ -67,12 +68,12 @@ async function handlePlay(msg: Message, args: string[], guild: Guild, voice: Voi
   const urls = query.split(" ").filter(part => part.startsWith("http"))
 
   if (urls.length > 1) {
-    msg.channel.send(`📥 Processing ${urls.length} URLs...`)
+    await sendMsg(msg, queue, `📥 Processing ${urls.length} URLs...`)
 
     for (const url of urls) {
       try {
         if (url.includes("list=")) {
-          msg.channel.send(`📥 Fetching playlist from: ${url}`)
+          await sendMsg(msg, queue, `📥 Fetching playlist from: ${url}`)
           const playlistSongs = await getPlaylistVideos(url)
           songs.push(...playlistSongs)
         } else {
@@ -86,11 +87,11 @@ async function handlePlay(msg: Message, args: string[], guild: Guild, voice: Voi
         }
       } catch (error) {
         console.error(`Error processing URL ${url}:`, error)
-        msg.channel.send(`❌ Failed to process URL: ${url}`)
+        await sendMsg(msg, queue, `❌ Failed to process URL: ${url}`)
       }
     }
 
-    msg.channel.send(`📥 Added **${songs.length}** songs from multiple URLs`)
+    await sendMsg(msg, queue, `📥 Added **${songs.length}** songs from multiple URLs`)
 
   } else if (query.startsWith("http")) {
     const parts = query.split(" ")
@@ -98,14 +99,14 @@ async function handlePlay(msg: Message, args: string[], guild: Guild, voice: Voi
     limit = parts[1] ? parseInt(parts[1]) : null
 
     if (url.includes("list=")) {
-      msg.channel.send("📥 Fetching playlist...")
+      await sendMsg(msg, queue, "📥 Fetching playlist...")
       songs = await getPlaylistVideos(url)
 
       if (limit && limit > 0) {
         songs = songs.slice(0, limit)
-        msg.channel.send(`📥 Added **${songs.length}** songs from playlist (limited to ${limit})`)
+        await sendMsg(msg, queue, `📥 Added **${songs.length}** songs from playlist (limited to ${limit})`)
       } else {
-        msg.channel.send(`📥 Added **${songs.length}** songs from playlist`)
+        await sendMsg(msg, queue, `📥 Added **${songs.length}** songs from playlist`)
       }
     } else {
       try {
@@ -116,10 +117,10 @@ async function handlePlay(msg: Message, args: string[], guild: Guild, voice: Voi
           duration: songData.duration,
           durationFormatted: songData.durationFormatted
         })
-        msg.channel.send(`📥 Added **${songs[0].title}**`)
+        await sendMsg(msg, queue, `📥 Added **${songs[0].title}**`)
       } catch (error) {
         console.error("Error fetching single URL:", error)
-        msg.channel.send(`❌ Failed to fetch video from URL: ${url}`)
+        await sendMsg(msg, queue, `❌ Failed to fetch video from URL: ${url}`)
         saveState()
         return
       }
@@ -133,10 +134,10 @@ async function handlePlay(msg: Message, args: string[], guild: Guild, voice: Voi
         duration: songData.duration,
         durationFormatted: songData.durationFormatted
       })
-      msg.channel.send(`📥 Added **${songs[0].title}**`)
+      await sendMsg(msg, queue, `📥 Added **${songs[0].title}**`)
     } catch (error) {
       console.error("Error searching for song:", error)
-      msg.channel.send(`❌ No results found for: ${query}`)
+      await sendMsg(msg, queue, `❌ No results found for: ${query}`)
       saveState()
       return
     }
@@ -149,7 +150,7 @@ async function handlePlay(msg: Message, args: string[], guild: Guild, voice: Voi
 
   if (!queue) {
     if (!voice) {
-      msg.reply("Join VC dulu")
+      await sendMsg(msg, queue, "Join VC dulu")
       return
     }
     const connection = joinVoiceChannel({
@@ -174,7 +175,8 @@ async function handlePlay(msg: Message, args: string[], guild: Guild, voice: Voi
       textChannel: playbackChannel as any,
       connection,
       player,
-      voiceChannelId: voice.id
+      voiceChannelId: voice.id,
+      userId: msg.author.id
     })
 
     queues.set(guild.id, queue)
@@ -201,7 +203,7 @@ async function handlePlay(msg: Message, args: string[], guild: Guild, voice: Voi
   }
 }
 
-function handleSkip(msg: Message, queue: Queue | undefined): void {
+async function handleSkip(msg: Message, queue: Queue | undefined): Promise<void> {
   if (queue) {
     queue.isSkipping = true
     if (queue.currentProcesses) {
@@ -210,24 +212,24 @@ function handleSkip(msg: Message, queue: Queue | undefined): void {
     }
     queue.player.stop()
     saveState()
-    msg.channel.send("⏭️ Skipped!")
+    await sendMsg(msg, queue, "⏭️ Skipped!")
   }
 }
 
-function handleLoop(msg: Message, queue: Queue | undefined): void {
+async function handleLoop(msg: Message, queue: Queue | undefined): Promise<void> {
   if (!queue) {
-    msg.reply("Tidak ada queue yang aktif")
+    await sendMsg(msg, queue, "Tidak ada queue yang aktif")
     return
   }
   queue.loopMode = ((queue.loopMode || 0) + 1) % 3
   const modes = ["Off ❌", "Single 🔂", "All 🔁"]
-  msg.channel.send(`🔂 Loop mode set to: **${modes[queue.loopMode]}**`)
+  await sendMsg(msg, queue, `🔂 Loop mode set to: **${modes[queue.loopMode]}**`)
   saveState()
 }
 
-function handleShuffle(msg: Message, queue: Queue | undefined): void {
+async function handleShuffle(msg: Message, queue: Queue | undefined): Promise<void> {
   if (!queue || queue.songs.length < 3) {
-    msg.reply("Butuh minimal 2 lagu di antrean untuk shuffle")
+    await sendMsg(msg, queue, "Butuh minimal 2 lagu di antrean untuk shuffle")
     return
   }
 
@@ -237,13 +239,13 @@ function handleShuffle(msg: Message, queue: Queue | undefined): void {
     [queue.songs[i], queue.songs[j]] = [queue.songs[j], queue.songs[i]]
   }
   if (playing) queue.songs.unshift(playing)
-  msg.channel.send("🔀 Queue berhasil di-shuffle!")
+  await sendMsg(msg, queue, "🔀 Queue berhasil di-shuffle!")
   saveState()
 }
 
-function handleQueue(msg: Message, queue: Queue | undefined): void {
+async function handleQueue(msg: Message, queue: Queue | undefined): Promise<void> {
   if (!queue || queue.songs.length === 0) {
-    msg.channel.send("Queue kosong")
+    await sendMsg(msg, queue, "Queue kosong")
     return
   }
 
@@ -263,12 +265,12 @@ function handleQueue(msg: Message, queue: Queue | undefined): void {
     queueMsg += `... and ${queue.songs.length - 10} more`
   }
 
-  msg.channel.send(queueMsg)
+  await sendMsg(msg, queue, queueMsg)
 }
 
-function handleStop(msg: Message, queue: Queue | undefined): void {
+async function handleStop(msg: Message, queue: Queue | undefined): Promise<void> {
   if (!queue) {
-    msg.reply("❌ Tidak ada musik yang sedang diputar")
+    await sendMsg(msg, queue, "❌ Tidak ada musik yang sedang diputar")
     return
   }
 
@@ -294,23 +296,23 @@ function handleStop(msg: Message, queue: Queue | undefined): void {
   queue.songs = []
   queue.player.stop()
   saveState()
-  msg.channel.send("⏹️ Berhenti memutar musik/radio")
+  await sendMsg(msg, queue, "⏹️ Berhenti memutar musik/radio")
 }
 
-function handleVolume(msg: Message, args: string[], queue: Queue | undefined): void {
+async function handleVolume(msg: Message, args: string[], queue: Queue | undefined): Promise<void> {
   if (!queue) {
-    msg.reply("Tidak ada musik yang sedang diputar")
+    await sendMsg(msg, queue, "Tidak ada musik yang sedang diputar")
     return
   }
   const volArg = args[0]
   if (!volArg) {
-    msg.reply(`Volume saat ini: **${Math.round((queue.volume ?? 1.0) * 100)}%**`)
+    await sendMsg(msg, queue, `Volume saat ini: **${Math.round((queue.volume ?? 1.0) * 100)}%**`)
     return
   }
 
   let vol = parseFloat(volArg)
   if (isNaN(vol)) {
-    msg.reply("Masukkan angka antara 0-100 atau 0.0-1.0")
+    await sendMsg(msg, queue, "Masukkan angka antara 0-100 atau 0.0-1.0")
     return
   }
   if (vol > 1) vol = vol / 100
@@ -324,7 +326,7 @@ function handleVolume(msg: Message, args: string[], queue: Queue | undefined): v
   }
 
   saveState()
-  msg.channel.send(`🔊 Volume diatur ke **${Math.round(vol * 100)}%**`)
+  await sendMsg(msg, queue, `🔊 Volume diatur ke **${Math.round(vol * 100)}%**`)
 }
 
 export {

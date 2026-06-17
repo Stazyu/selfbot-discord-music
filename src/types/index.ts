@@ -85,6 +85,8 @@ export interface Queue {
   radioReconnectAttempts?: number
   metadataDetector?: RadioMetadataDetector
   hasReactionUI?: boolean
+  silent: boolean
+  userId: string | null
 }
 
 export interface RadioMetadataResult {

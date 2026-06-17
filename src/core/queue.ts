@@ -29,7 +29,9 @@ function saveState(stateLog: boolean = true): void {
       loopMode: queue.loopMode || 0,
       playing: queue.playing || false,
       musicReconnectAttempts: queue.musicReconnectAttempts || 0,
-      isMusicReconnecting: queue.isMusicReconnecting || false
+      isMusicReconnecting: queue.isMusicReconnecting || false,
+      silent: queue.silent || false,
+      userId: queue.userId || null
     }
   }
 
@@ -83,6 +85,8 @@ function createDefaultQueue(overrides: Partial<Queue> = {}): Queue {
     reactionCollector: null,
     panelCollector: null,
     reconnectMessage: null,
+    silent: false,
+    userId: null,
     ...overrides
   } as Queue
 }

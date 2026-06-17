@@ -5,6 +5,7 @@ import { playSong, playRadio } from "../core/player"
 import { removeAllReactionsFromChannel, createCommandPanel } from "../ui/reactions"
 import config from "../config"
 import { Queue } from "../types"
+import { sendMsg } from "../utils/send"
 
 function handleTest(msg: Message): Promise<Message> {
   console.log("Test : ", msg)
@@ -33,6 +34,7 @@ function handleHelp(msg: Message): void {
     "**?sync** - Sync channel ID dan auto-join ke voice channel saat ini",
     "**?state** - Show current bot state",
     "**?panel** - Show control panel with reaction UI",
+    "**?silent** - Toggle silent mode (message hanya di DM)",
     "**?help** - Show this help message",
     "",
     "*You must be in a voice channel to use these commands*",
@@ -42,9 +44,9 @@ function handleHelp(msg: Message): void {
   msg.channel.send(helpEmbed)
 }
 
-function handleLeave(msg: Message, guild: Guild | undefined, queue: Queue | undefined): void {
+async function handleLeave(msg: Message, guild: Guild | undefined, queue: Queue | undefined): Promise<void> {
   if (!queue) {
-    msg.reply("Bot belum join ke voice channel")
+    await sendMsg(msg, queue, "Bot belum join ke voice channel")
     return
   }
 
@@ -62,7 +64,7 @@ function handleLeave(msg: Message, guild: Guild | undefined, queue: Queue | unde
     queue.reactionCollector = null
   }
 
-  msg.channel.send("👋 Keluar dari voice channel")
+  await sendMsg(msg, queue, "👋 Keluar dari voice channel")
   queue.songs = []
   queue.player.stop()
   queue.connection?.destroy()
@@ -72,18 +74,16 @@ function handleLeave(msg: Message, guild: Guild | undefined, queue: Queue | unde
 
 async function handleClearChat(msg: Message, args: string[], queue: Queue | undefined): Promise<void> {
   if (!queue) {
-    msg.reply("Bot belum join ke voice channel")
+    await sendMsg(msg, queue, "Bot belum join ke voice channel")
     return
   }
 
-  const textChannel = queue.textChannel
-  if (!textChannel) {
-    msg.reply("Tidak ada text channel terkait")
-    return
-  }
+  const textChannel = msg.channel as any
+  const isDM = !textChannel.guild
 
-  if (!textChannel.guild) {
-    msg.reply("❌ Command ini tidak bisa digunakan di DM. Gunakan di server text channel.")
+  const targetChannel = isDM ? queue.textChannel : textChannel
+  if (!targetChannel) {
+    await sendMsg(msg, queue, "Tidak ada text channel target")
     return
   }
 
@@ -92,25 +92,25 @@ async function handleClearChat(msg: Message, args: string[], queue: Queue | unde
   if (countArg) {
     limit = parseInt(countArg)
     if (isNaN(limit) || limit < 1) {
-      msg.reply("Masukkan angka yang valid")
+      await sendMsg(msg, queue, "Masukkan angka yang valid")
       return
     }
     if (limit > 100) {
-      msg.reply("Maksimal 100 pesan")
+      await sendMsg(msg, queue, "Maksimal 100 pesan")
       return
     }
   }
 
   try {
-    msg.channel.send(`🗑️ Menghapus ${limit} pesan terakhir dari text channel server...`)
+    await sendMsg(msg, queue, `🗑️ Menghapus ${limit} pesan terakhir dari text channel server...`)
 
-    const messages = await textChannel.messages.fetch({ limit })
+    const messages = await targetChannel.messages.fetch({ limit })
     const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000
 
-    const messagesToDelete = messages.filter(m => m.createdTimestamp > twoWeeksAgo && m.author.id === msg.client.user!.id)
+    const messagesToDelete = messages.filter((m: any) => m.createdTimestamp > twoWeeksAgo && m.author.id === msg.client.user!.id)
 
     if (messagesToDelete.size === 0) {
-      msg.channel.send("ℹ️ Tidak ada pesan yang bisa dihapus (pesan lebih dari 14 hari tidak bisa dihapus)")
+      await sendMsg(msg, queue, "ℹ️ Tidak ada pesan yang bisa dihapus (pesan lebih dari 14 hari tidak bisa dihapus)")
       return
     }
 
@@ -124,59 +124,60 @@ async function handleClearChat(msg: Message, args: string[], queue: Queue | unde
       }
     }
 
-    msg.channel.send(`✅ Berhasil menghapus **${deletedCount}** pesan dari text channel server`)
+    await sendMsg(msg, queue, `✅ Berhasil menghapus **${deletedCount}** pesan dari text channel server`)
   } catch (err) {
     console.error("Error deleting messages:", err)
-    msg.channel.send("❌ Gagal menghapus pesan: " + (err as Error).message)
+    await sendMsg(msg, queue, "❌ Gagal menghapus pesan: " + (err as Error).message)
   }
 }
 
 async function handleClearReactions(msg: Message, queue: Queue | undefined): Promise<void> {
   if (!queue) {
-    msg.reply("Bot belum join ke voice channel")
+    await sendMsg(msg, queue, "Bot belum join ke voice channel")
     return
   }
 
   const textChannel = queue.textChannel
   if (!textChannel) {
-    msg.reply("Tidak ada text channel terkait")
+    await sendMsg(msg, queue, "Tidak ada text channel terkait")
     return
   }
 
   if (!textChannel.guild) {
-    msg.reply("❌ Command ini tidak bisa digunakan di DM. Gunakan di server text channel.")
+    await sendMsg(msg, queue, "❌ Command ini tidak bisa digunakan di DM. Gunakan di server text channel.")
     return
   }
 
   try {
-    msg.channel.send("🧹 Menghapus semua reaction dari text channel server...")
+    await sendMsg(msg, queue, "🧹 Menghapus semua reaction dari text channel server...")
     await removeAllReactionsFromChannel(textChannel)
-    msg.channel.send("✅ Semua reaction berhasil dihapus dari text channel server")
+    await sendMsg(msg, queue, "✅ Semua reaction berhasil dihapus dari text channel server")
   } catch (err) {
     console.error("Error clearing reactions:", err)
-    msg.channel.send("❌ Gagal menghapus reaction: " + (err as Error).message)
+    await sendMsg(msg, queue, "❌ Gagal menghapus reaction: " + (err as Error).message)
   }
 }
 
 async function handleSync(msg: Message, args: string[], guild: Guild, voice: VoiceChannel | null, queue: Queue | undefined): Promise<void> {
   if (!queue) {
-    msg.reply("❌ Tidak ada queue yang aktif. Gunakan command ?play atau ?radio terlebih dahulu.")
+    await sendMsg(msg, queue, "❌ Tidak ada queue yang aktif. Gunakan command ?play atau ?radio terlebih dahulu.")
     return
   }
 
   if (!voice) {
-    msg.reply("❌ Kamu harus berada di voice channel!")
+    await sendMsg(msg, queue, "❌ Kamu harus berada di voice channel!")
     return
   }
 
   if (!msg.member) {
-    msg.reply("❌ Command ini tidak bisa digunakan di DM. Gunakan di server text channel.")
+    await sendMsg(msg, queue, "❌ Command ini tidak bisa digunakan di DM. Gunakan di server text channel.")
     return
   }
 
   try {
     queue.voiceChannelId = voice.id
     queue.textChannel = msg.channel as any
+    queue.userId = msg.author.id
 
     if (queue.connection) queue.connection.destroy()
 
@@ -191,7 +192,7 @@ async function handleSync(msg: Message, args: string[], guild: Guild, voice: Voi
     connection.subscribe(queue.player)
     queue.connection = connection
 
-    msg.channel.send("✅ Channel ID berhasil di-sync dan bot sudah join ke voice channel!")
+    await sendMsg(msg, queue, "✅ Channel ID berhasil di-sync dan bot sudah join ke voice channel!")
 
     if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
       playRadio(guild, queue.radioUrl, queue.radioName)
@@ -202,13 +203,13 @@ async function handleSync(msg: Message, args: string[], guild: Guild, voice: Voi
     saveState()
   } catch (err) {
     console.error("Error syncing channel:", err)
-    msg.reply("❌ Gagal sync channel: " + (err as Error).message)
+    await sendMsg(msg, queue, "❌ Gagal sync channel: " + (err as Error).message)
   }
 }
 
 async function handleJoin(msg: Message, args: string[], guild: Guild, voice: VoiceChannel | null, queue: Queue | undefined): Promise<void> {
   if (!voice) {
-    msg.reply("Join VC dulu")
+    await sendMsg(msg, queue, "Join VC dulu")
     return
   }
 
@@ -238,13 +239,15 @@ async function handleJoin(msg: Message, args: string[], guild: Guild, voice: Voi
         textChannel: playbackChannel as any,
         connection,
         player,
-        voiceChannelId: voice.id
+        voiceChannelId: voice.id,
+        userId: msg.author.id
       })
       queues.set(guild.id, queue!)
     } else {
       queue.connection = connection
       queue.voiceChannelId = voice.id
       queue.textChannel = playbackChannel as any
+      queue.userId = msg.author.id
       connection.subscribe(queue.player)
     }
 
@@ -255,11 +258,11 @@ async function handleJoin(msg: Message, args: string[], guild: Guild, voice: Voi
     }
 
     saveState()
-    msg.channel.send(`✅ Bot berhasil join ke voice channel: **${voice.name}**`)
+    await sendMsg(msg, queue, `✅ Bot berhasil join ke voice channel: **${voice.name}**`)
 
   } catch (err) {
     console.error("Error joining voice channel:", err)
-    msg.reply("❌ Gagal join ke voice channel: " + (err as Error).message)
+    await sendMsg(msg, queue, "❌ Gagal join ke voice channel: " + (err as Error).message)
   }
 }
 
@@ -350,10 +353,27 @@ function handleState(msg: Message): void {
 
 function handlePanel(msg: Message, queue: Queue | undefined): void {
   if (!queue) {
-    msg.reply("❌ Bot belum join ke voice channel. Gunakan command ?play atau ?radio terlebih dahulu.")
+    sendMsg(msg, queue, "❌ Bot belum join ke voice channel. Gunakan command ?play atau ?radio terlebih dahulu.")
     return
   }
   createCommandPanel(msg, queue)
+}
+
+async function handleSilent(msg: Message, queue: Queue | undefined): Promise<void> {
+  if (!queue) {
+    sendMsg(msg, queue, "❌ Tidak ada queue aktif. Join voice channel dulu.")
+    return
+  }
+
+  queue.silent = !queue.silent
+  queue.userId = msg.author.id
+  saveState()
+
+  if (queue.silent) {
+    await sendMsg(msg, queue, "🔇 Mode silent **ON** - Semua pesan akan dikirim ke DM")
+  } else {
+    await msg.channel.send("🔊 Mode silent **OFF** - Pesan akan dikirim ke channel")
+  }
 }
 
 export {
@@ -365,5 +385,6 @@ export {
   handleSync,
   handleJoin,
   handleState,
-  handlePanel
+  handlePanel,
+  handleSilent
 }

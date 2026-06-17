@@ -3,7 +3,7 @@ import config from "../config"
 import { queues } from "../core/queue"
 import { handlePlay, handleSkip, handleLoop, handleShuffle, handleQueue, handleStop, handleVolume } from "./music"
 import { handleRadio, handleRadioStats } from "./radio"
-import { handleTest, handleHelp, handleLeave, handleClearChat, handleClearReactions, handleSync, handleJoin, handleState, handlePanel } from "./utility"
+import { handleTest, handleHelp, handleLeave, handleClearChat, handleClearReactions, handleSync, handleJoin, handleState, handlePanel, handleSilent } from "./utility"
 import { Queue } from "../types"
 
 async function handleMessageCreate(msg: Message): Promise<void> {
@@ -128,6 +128,10 @@ async function handleMessageCreate(msg: Message): Promise<void> {
     }
     case "state": {
       handleState(msg)
+      return
+    }
+    case "silent": {
+      await handleSilent(msg, queue)
       return
     }
   }

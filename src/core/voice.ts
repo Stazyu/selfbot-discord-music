@@ -2,6 +2,7 @@ import { joinVoiceChannel } from "@discordjs/voice"
 import { Client, Guild, VoiceChannel } from "selfbotsdk-discordjs"
 import { queues, saveState } from "./queue"
 import { playSong, playRadio } from "./player"
+import { sendToTextChannel } from "../utils/send"
 
 let clientRef: Client | null = null
 
@@ -57,7 +58,7 @@ async function resumeAllMusic(): Promise<void> {
 
       if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
         console.log(`Resuming radio: ${queue.radioName}`)
-        queue.textChannel?.send("🔄 Reconnecting to radio after deployment...")
+        sendToTextChannel(queue, "🔄 Reconnecting to radio after deployment...")
         setTimeout(() => playRadio(guild, queue.radioUrl!, queue.radioName!), 3000)
         resumedCount++
       } else if (queue.songs.length > 0) {
@@ -71,7 +72,7 @@ async function resumeAllMusic(): Promise<void> {
           posStr = ` (${Math.floor(elapsedSeconds / 60)}:${(elapsedSeconds % 60).toString().padStart(2, "0")})`
           console.log(`Resuming from ${elapsedSeconds}s for "${queue.currentSong.title}"`)
         }
-        queue.textChannel?.send(`🔄 Resuming music after deployment${posStr}...`)
+        sendToTextChannel(queue, `🔄 Resuming music after deployment${posStr}...`)
         setTimeout(() => playSong(guild, queue.songs[0]), 2000)
         resumedCount++
       } else {
@@ -79,7 +80,7 @@ async function resumeAllMusic(): Promise<void> {
       }
     } catch (err) {
       console.error(`Error resuming music for guild ${guildId}:`, err)
-      queue.textChannel?.send("❌ Gagal reconnect setelah deployment. Silakan coba manual.")
+      sendToTextChannel(queue, "❌ Gagal reconnect setelah deployment. Silakan coba manual.")
       failedCount++
     }
   }
@@ -109,7 +110,7 @@ function registerVoiceStateUpdateHandler(): void {
         }
 
         queue.voiceChannelId = oldState.channel.id
-        queue.textChannel?.send(`⚠️ Bot terkick dari VC${posStr}, mencoba rejoin dalam 5 detik...`).catch((err: any) => {
+        sendToTextChannel(queue, `⚠️ Bot terkick dari VC${posStr}, mencoba rejoin dalam 5 detik...`).catch((err: any) => {
           if (err.code === 50001) {
             console.error("[voice-state] Missing Access: Bot tidak memiliki izin untuk mengirim pesan ke channel setelah terkick dari VC")
           } else {
@@ -131,7 +132,7 @@ function registerVoiceStateUpdateHandler(): void {
                 })
                 connection.subscribe(queue.player)
                 queue.connection = connection
-                queue.textChannel?.send("✅ Berhasil rejoin ke VC")
+                sendToTextChannel(queue, "✅ Berhasil rejoin ke VC")
                 queue.radioReconnectAttempts = 0
                 queue.musicReconnectAttempts = 0
                 queue.isMusicReconnecting = false
@@ -144,11 +145,11 @@ function registerVoiceStateUpdateHandler(): void {
                 }
               } catch (err) {
                 console.error("Error rejoining voice channel:", err)
-                queue.textChannel?.send("❌ Gagal rejoin ke VC")
+                sendToTextChannel(queue, "❌ Gagal rejoin ke VC")
               }
             } else {
               console.log("Voice channel tidak ditemukan, kemungkinan temporary channel dihapus")
-              queue.textChannel?.send("🔄 Voice channel tidak ditemukan. State direset. Join ke voice baru untuk melanjutkan.")
+              sendToTextChannel(queue, "🔄 Voice channel tidak ditemukan. State direset. Join ke voice baru untuk melanjutkan.")
 
               queue.voiceChannelId = null
               queue.connection = null
@@ -179,7 +180,7 @@ function registerVoiceStateUpdateHandler(): void {
         queue.voiceChannelId = newState.channel.id
         queue.textChannel = newState.channel
 
-        queue.textChannel?.send("🔄 Bot siap untuk melanjutkan. Gunakan command ?play atau ?radio untuk memulai kembali.")
+        sendToTextChannel(queue, "🔄 Bot siap untuk melanjutkan. Gunakan command ?play atau ?radio untuk memulai kembali.")
         saveState()
       }
     }

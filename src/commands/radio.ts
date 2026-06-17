@@ -4,25 +4,26 @@ import { queues, saveState, createDefaultQueue } from "../core/queue"
 import { playRadio } from "../core/player"
 import { resolveRadioMetadata } from "../services/radio"
 import { Queue } from "../types"
+import { sendMsg } from "../utils/send"
 
 async function handleRadio(msg: Message, args: string[], guild: Guild, voice: VoiceChannel | null, queue: Queue | undefined): Promise<void> {
   const query = args.join(" ")
 
   if (!query) {
-    msg.reply("Usage: ?radio <station name or URL>")
+    await sendMsg(msg, queue, "Usage: ?radio <station name or URL>")
     return
   }
 
   try {
-    msg.channel.send("📻 Searching for radio station...")
+    await sendMsg(msg, queue, "📻 Searching for radio station...")
 
     const radio = await resolveRadioMetadata(query)
 
-    msg.channel.send(`📻 Found: **${radio.name}** ${radio.country ? `(${radio.country})` : ""}`)
+    await sendMsg(msg, queue, `📻 Found: **${radio.name}** ${radio.country ? `(${radio.country})` : ""}`)
 
     if (!queue) {
       if (!voice) {
-        msg.reply("Join VC dulu")
+        await sendMsg(msg, queue, "Join VC dulu")
         return
       }
       const connection = joinVoiceChannel({
@@ -47,7 +48,8 @@ async function handleRadio(msg: Message, args: string[], guild: Guild, voice: Vo
         textChannel: playbackChannel as any,
         connection,
         player,
-        voiceChannelId: voice.id
+        voiceChannelId: voice.id,
+        userId: msg.author.id
       })
 
       queues.set(guild.id, queue)
@@ -62,13 +64,13 @@ async function handleRadio(msg: Message, args: string[], guild: Guild, voice: Vo
 
   } catch (err) {
     console.error("Radio error:", err)
-    msg.reply("❌ Error: " + (err as Error).message)
+    await sendMsg(msg, queue, "❌ Error: " + (err as Error).message)
   }
 }
 
-function handleRadioStats(msg: Message, queue: Queue | undefined): void {
+async function handleRadioStats(msg: Message, queue: Queue | undefined): Promise<void> {
   if (!queue || !queue.radioFfmpeg) {
-    msg.reply("❌ Tidak ada radio yang sedang dimainkan")
+    await sendMsg(msg, queue, "❌ Tidak ada radio yang sedang dimainkan")
     return
   }
 
@@ -93,7 +95,7 @@ function handleRadioStats(msg: Message, queue: Queue | undefined): void {
     statsMsg += `🎵 **Metadata Detector:** Inactive\n`
   }
 
-  msg.channel.send(statsMsg)
+  await sendMsg(msg, queue, statsMsg)
 }
 
 export { handleRadio, handleRadioStats }
