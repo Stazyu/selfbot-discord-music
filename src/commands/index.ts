@@ -39,13 +39,13 @@ async function handleMessageCreate(msg: Message): Promise<void> {
       }
     }
 
-    if (!voice && cmd !== "join") {
+    if (!voice) {
       msg.reply("❌ Kamu harus berada di voice channel di salah satu server untuk menggunakan command ini di DM")
       return
     }
   } else {
     voice = msg.member.voice.channel as VoiceChannel | null
-    if (!voice && cmd !== "join" && cmd !== "help" && cmd !== "state" && cmd !== "test") {
+    if (!voice && cmd !== "help" && cmd !== "state" && cmd !== "test") {
       msg.reply("Join VC dulu")
       return
     }
@@ -114,6 +114,7 @@ async function handleMessageCreate(msg: Message): Promise<void> {
       return
     }
     case "join": {
+      if (!guild) { msg.reply("Guild not found"); return }
       await handleJoin(msg, args, guild, voice, queue)
       return
     }

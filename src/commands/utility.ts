@@ -206,76 +206,17 @@ async function handleSync(msg: Message, args: string[], guild: Guild, voice: Voi
   }
 }
 
-async function handleJoin(msg: Message, args: string[], guildIn: Guild | undefined, voiceIn: VoiceChannel | null, queue: Queue | undefined): Promise<void> {
-  let voiceChannel: VoiceChannel | undefined
-  let guild = guildIn
-
-  if (voiceIn) {
-    voiceChannel = voiceIn
-    if (!guild) guild = voiceIn.guild
-  } else {
-    const voiceChannelId = args[0]
-    if (!voiceChannelId) {
-      msg.reply("❌ Kamu tidak terdeteksi di voice channel manapun. Gunakan ?join <voice_channel_id>")
-      return
-    }
-
-    if (guild) {
-      voiceChannel = guild.channels.cache.get(voiceChannelId) as VoiceChannel | undefined
-      if (!voiceChannel) {
-        try {
-          const fetched = await guild.channels.fetch(voiceChannelId)
-          voiceChannel = fetched as VoiceChannel
-        } catch {}
-      }
-    } else {
-      for (const [, g] of msg.client.guilds.cache) {
-        const ch = g.channels.cache.get(voiceChannelId)
-        if (ch && Number(ch.type) === 2) {
-          voiceChannel = ch as VoiceChannel
-          guild = g
-          break
-        }
-        try {
-          const fetched = await g.channels.fetch(voiceChannelId)
-          if (fetched && Number(fetched.type) === 2) {
-            voiceChannel = fetched as VoiceChannel
-            guild = g
-            break
-          }
-        } catch {}
-      }
-    }
-  }
-
-  if (!voiceChannel || Number(voiceChannel.type) !== 2) {
-    msg.reply("❌ Voice channel tidak ditemukan atau ID tidak valid")
+async function handleJoin(msg: Message, args: string[], guild: Guild, voice: VoiceChannel | null, queue: Queue | undefined): Promise<void> {
+  if (!voice) {
+    msg.reply("Join VC dulu")
     return
-  }
-
-  if (msg.member && guild) {
-    try {
-      const member = await guild.members.fetch(msg.author.id)
-      if (!member.permissionsIn(voiceChannel.id).has("CONNECT" as any)) {
-        msg.reply("❌ Kamu tidak memiliki izin untuk join ke voice channel tersebut")
-        return
-      }
-    } catch {
-      msg.reply("❌ Kamu tidak memiliki izin untuk join ke voice channel tersebut")
-      return
-    }
   }
 
   try {
     if (queue && queue.connection) queue.connection.destroy()
 
-    if (!guild) {
-      msg.reply("❌ Guild tidak ditemukan")
-      return
-    }
-
     const connection = joinVoiceChannel({
-      channelId: voiceChannel.id,
+      channelId: voice.id,
       guildId: guild.id,
       adapterCreator: guild.voiceAdapterCreator,
       selfDeaf: false,
@@ -287,28 +228,34 @@ async function handleJoin(msg: Message, args: string[], guildIn: Guild | undefin
 
     const playbackChannel = (msg.channel as any).guild
       ? msg.channel
-      : (voiceChannel.guild.systemChannel || voiceChannel.guild.channels.cache.find(c => {
+      : (voice.guild.systemChannel || voice.guild.channels.cache.find(c => {
           const ch = c as any
           return ch.isTextBased && ch.type === 0
-        }) || voiceChannel.guild.channels.cache.first())
+        }) || voice.guild.channels.cache.first())
 
     if (!queue) {
       queue = createDefaultQueue({
         textChannel: playbackChannel as any,
         connection,
         player,
-        voiceChannelId: voiceChannel.id
+        voiceChannelId: voice.id
       })
       queues.set(guild.id, queue!)
     } else {
       queue.connection = connection
-      queue.voiceChannelId = voiceChannel.id
+      queue.voiceChannelId = voice.id
       queue.textChannel = playbackChannel as any
       connection.subscribe(queue.player)
     }
 
+    if (queue.radioUrl && queue.radioName && !queue.radioStopped) {
+      playRadio(guild, queue.radioUrl, queue.radioName)
+    } else if (queue.songs && queue.songs.length > 0) {
+      playSong(guild, queue.songs[0])
+    }
+
     saveState()
-    msg.channel.send(`✅ Bot berhasil join ke voice channel: **${voiceChannel.name}**`)
+    msg.channel.send(`✅ Bot berhasil join ke voice channel: **${voice.name}**`)
 
   } catch (err) {
     console.error("Error joining voice channel:", err)
