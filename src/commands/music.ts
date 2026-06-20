@@ -1,7 +1,7 @@
 import { joinVoiceChannel, createAudioPlayer, AudioPlayerStatus } from "@discordjs/voice"
 import { spawn } from "child_process"
 import fs from "fs"
-import { Message, Guild, VoiceChannel } from "selfbotsdk-discordjs"
+import { Message, Guild, VoiceChannel, MessageAttachment } from "selfbotsdk-discordjs"
 import { queues, saveState, createDefaultQueue } from "../core/queue"
 import { playSong } from "../core/player"
 import { searchSong } from "../services/youtube"
@@ -268,21 +268,44 @@ async function handleQueue(msg: Message, queue: Queue | undefined): Promise<void
 
   const modes = ["Off ❌", "Single 🔂", "All 🔁"]
   const loopStatus = modes[queue.loopMode || 0]
+  const currentSong = queue.currentSong
 
-  let queueMsg = `📜 **Queue | Loop: ${loopStatus}**\n\n`
-  queue.songs.slice(0, 10).forEach((song, i) => {
-    if (song && song.title) {
-      queueMsg += `${i + 1}. ${song.title}\n`
-    } else {
-      queueMsg += `${i + 1}. Unknown Song (Invalid data)\n`
-    }
-  })
+  // Build .txt content
+  let txtContent = ""
 
-  if (queue.songs.length > 10) {
-    queueMsg += `... and ${queue.songs.length - 10} more`
+  if (currentSong) {
+    txtContent += `Now Playing: ${currentSong.title}\n`
+    txtContent += `${currentSong.url}\n`
+    txtContent += `${"=".repeat(50)}\n\n`
   }
 
-  await sendMsg(msg, queue, queueMsg)
+  txtContent += `Queue (${queue.songs.length} songs) | Loop: ${loopStatus}\n`
+  txtContent += `${"=".repeat(50)}\n\n`
+
+  queue.songs.forEach((song, i) => {
+    const title = song?.title || "Unknown Song"
+    const duration = song?.durationFormatted || "Unknown"
+    const url = song?.url || "No URL"
+    txtContent += `${i + 1}. ${title}\n`
+    txtContent += `   Duration: ${duration}\n`
+    txtContent += `   ${url}\n\n`
+  })
+
+  const buffer = Buffer.from(txtContent, "utf-8")
+  const attachment = new MessageAttachment(buffer, "queue.txt")
+
+  // Kirim preview singkat + file .txt
+  const preview = `📜 **Queue** (${queue.songs.length} lagu${currentSong ? ` | 🎵 **${currentSong.title}**` : ""} | Loop: ${loopStatus}) — File: \`queue.txt\``
+
+  if (queue?.silent) {
+    try {
+      await msg.author.send({ content: preview, files: [attachment] })
+    } catch {
+      await msg.channel.send({ content: preview, files: [attachment] }).catch(() => {})
+    }
+  } else {
+    await msg.channel.send({ content: preview, files: [attachment] })
+  }
 }
 
 async function handleStop(msg: Message, queue: Queue | undefined): Promise<void> {
