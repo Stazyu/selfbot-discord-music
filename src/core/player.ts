@@ -1,6 +1,7 @@
 import { createAudioResource, AudioPlayerStatus, StreamType } from "@discordjs/voice"
 import { spawn } from "child_process"
 import { Readable } from "stream"
+import fs from "fs"
 import config from "../config"
 import { queues, saveState } from "./queue"
 import { Song, Processes } from "../types"
@@ -12,6 +13,10 @@ interface StreamWithProcesses extends Readable {
 
 function stream(url: string, seekTime: number | null = null): StreamWithProcesses {
   const ytdlpArgs: string[] = ["-f", "bestaudio", "-o", "-"]
+
+  if (fs.existsSync(config.cookiesFile)) {
+    ytdlpArgs.push("--cookies", config.cookiesFile)
+  }
 
   if (seekTime) {
     const hh = Math.floor(seekTime / 3600)

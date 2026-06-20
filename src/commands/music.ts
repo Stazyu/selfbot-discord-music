@@ -1,5 +1,6 @@
 import { joinVoiceChannel, createAudioPlayer, AudioPlayerStatus } from "@discordjs/voice"
 import { spawn } from "child_process"
+import fs from "fs"
 import { Message, Guild, VoiceChannel } from "selfbotsdk-discordjs"
 import { queues, saveState, createDefaultQueue } from "../core/queue"
 import { playSong } from "../core/player"
@@ -19,7 +20,16 @@ interface PlaylistJSON {
 
 async function getPlaylistVideos(url: string): Promise<PlaylistVideoEntry[]> {
   return new Promise((resolve, reject) => {
-    const ytdlp = spawn(config.ytdlpExecutable, ["--dump-single-json", url])
+    const ytdlpArgs: string[] = ["--dump-single-json", "--flat-playlist"]
+
+    if (fs.existsSync(config.cookiesFile)) {
+      console.log("Cookie masuk (playlist)")
+      ytdlpArgs.push("--cookies", config.cookiesFile)
+    }
+
+    ytdlpArgs.push(url)
+
+    const ytdlp = spawn(config.ytdlpExecutable, ytdlpArgs)
 
     let output = ""
     let errorOutput = ""
