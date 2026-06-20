@@ -59,7 +59,12 @@ async function handleMessageCreate(msg: Message): Promise<void> {
     }
     case "play": {
       if (!guild) { msg.reply("Guild not found"); return }
-      await handlePlay(msg, args, guild, voice, queue)
+      try {
+        await handlePlay(msg, args, guild, voice, queue)
+      } catch (error) {
+        console.error("Error in handlePlay:", error)
+        try { msg.channel.send("❌ Terjadi error saat memproses perintah play").catch(() => {}) } catch {}
+      }
       return
     }
     case "skip": {

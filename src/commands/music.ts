@@ -110,7 +110,14 @@ async function handlePlay(msg: Message, args: string[], guild: Guild, voice: Voi
 
     if (url.includes("list=")) {
       await sendMsg(msg, queue, "📥 Fetching playlist...")
-      songs = await getPlaylistVideos(url)
+      try {
+        songs = await getPlaylistVideos(url)
+      } catch (error) {
+        console.error("Error fetching playlist:", error)
+        await sendMsg(msg, queue, `❌ Failed to fetch playlist: ${url}`)
+        saveState()
+        return
+      }
 
       if (limit && limit > 0) {
         songs = songs.slice(0, limit)

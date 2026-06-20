@@ -3,7 +3,12 @@ import { Queue } from "../types"
 
 async function sendMsg(msg: Message, queue: Queue | undefined | null, content: string): Promise<void> {
   if (queue?.silent) {
-    await msg.author.send(content)
+    try {
+      await msg.author.send(content)
+    } catch {
+      // If DM fails (e.g. selfbot can't DM itself), fallback to channel
+      await msg.channel.send(content).catch(() => {})
+    }
   } else {
     await msg.channel.send(content)
   }
