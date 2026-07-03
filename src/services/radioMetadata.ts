@@ -163,7 +163,6 @@ function startRadioMetadataDetection(radioUrl: string, queue: Queue): {
   return {
     stop: () => {
       console.log("[radio-http] Stopping...")
-      queue.radioStopped = true
       if (metadataInterval) {
         clearInterval(metadataInterval)
         metadataInterval = null

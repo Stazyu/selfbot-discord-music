@@ -336,7 +336,10 @@ async function playRadio(guild: any, radioUrl: string, radioName: string): Promi
   console.log("Playing radio:", radioName)
 
   try {
-    if (queue.radioFfmpeg) queue.radioFfmpeg.kill()
+    if (queue.radioFfmpeg) {
+      queue.radioFfmpeg._intentionalKill = true
+      queue.radioFfmpeg.kill()
+    }
 
     // Clean up old listeners to prevent leak on reconnect
     queue.player.removeAllListeners("error")
@@ -403,9 +406,10 @@ async function playRadio(guild: any, radioUrl: string, radioName: string): Promi
     }
 
     const ff = spawnRadioFfmpeg(radioUrl, codec, (code: number | null, signal: string | null) => {
-      // Explicit SIGTERM: we intentionally killed ffmpeg (stop, new radio, etc.)
-      if (signal === "SIGTERM" || signal === "15") {
-        console.log("[radio] ffmpeg terminated normally (SIGTERM), no reconnect needed")
+      // Explicit SIGTERM or intentional kill: we intentionally killed ffmpeg (stop, new radio, etc.)
+      // On Windows, kill("SIGTERM") produces code=255 signal=null, so we also check _intentionalKill
+      if (signal === "SIGTERM" || signal === "15" || ff._intentionalKill) {
+        console.log("[radio] ffmpeg terminated normally (intentional kill), no reconnect needed")
         return
       }
 

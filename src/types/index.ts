@@ -51,6 +51,7 @@ export interface RadioMetadataDetector {
 
 export interface FFmpegWithExtensions extends ChildProcess {
   _brokenPipeDetected?: boolean
+  _intentionalKill?: boolean
   getStreamStats?: () => StreamStats
 }
 
