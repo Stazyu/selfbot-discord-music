@@ -215,7 +215,7 @@ async function handlePlay(msg: Message, args: string[], guild: Guild, voice: Voi
   saveState()
   console.log(`💾 State saved. Queue songs count: ${queue.songs.length}`)
 
-  if (queue.songs.length === songs.length) {
+  if (queue.player.state.status === AudioPlayerStatus.Idle) {
     playSong(guild, queue.songs[0])
   }
 }
